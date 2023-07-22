@@ -1,0 +1,17 @@
+{
+    "schema_version": "v1",
+    "name_for_human": "arXiv Xplorer",
+    "name_for_model": "arxivXplorer",
+    "description_for_human": "Semantic search for arXiv papers.",
+    "description_for_model": "Semantic search for arXiv papers. You can search for papers using a text query or by similarity to another arxiv paper.",
+    "auth": {
+      "type": "none"
+    },
+    "api": {
+      "type": "openapi",
+      "url": "http://localhost:5003/openapi.yaml"
+    },
+    "logo_url": "http://localhost:5003/logo.png",
+    "contact_email": "ttumiel@gmail.com",
+    "legal_info_url": "http://example.com/legal"
+}
