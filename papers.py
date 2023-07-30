@@ -1,14 +1,18 @@
 import re
+import os
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Optional, Tuple, Union
 
 import texttable
 from plasTeX import DOM, TeX
+from plasTeX.Logging import disableLogging
 from pylatexenc.latex2text import (
     LatexNodes2Text,
     MacroTextSpec,
     get_default_latex_context_db,
 )
+
+disableLogging()
 
 
 @dataclass
@@ -45,11 +49,7 @@ class Paper:
 
         tex = TeX.TeX(file=filename)
         self.tex_doc = tex.parse()
-        self.tree = Section(
-            title=self.title,
-            content=self.to_text(self.tex_doc),
-            subsections=self.extract_nodes(),
-        )
+        self.tree = self.build_tree()
 
     def table_of_contents(self, sections, level=0):
         """
@@ -108,8 +108,15 @@ class Paper:
     def toc(self):
         return "\n".join(self.table_of_contents(self.tree.subsections))
 
-    def __getitem__(self, key: int):
-        return self.tree.subsections[key]
+    def __getitem__(self, key: Union[int, Tuple[int]]):
+        if isinstance(key, int):
+            return self.tree.subsections[key]
+        else:
+            sections = self.tree.subsections
+            for i in key:
+                section = sections[i]
+                sections = section.subsections
+            return section.content
 
     def __repr__(self):
         return "\n".join(self.table_of_contents([self.tree]))
@@ -125,12 +132,24 @@ class Paper:
         result = re.sub(r"[ \t]*([.,;:!?])[ \t]+", r"\1 ", result)
         return result
 
-    def to_text(self, tex_doc: TeX.TeXDocument):
+    def build_tree(self):
+        content, subsections = self.build_content(self.tex_doc)
+        main_section = Section(
+            title=self.title,
+            content=content,
+            subsections=subsections,
+        )
+
+        return main_section
+
+    def build_content(self, tex_doc: TeX.TeXDocument) -> Tuple[str, List[Section]]:
         """Get the text content of the current node"""
         try:
-            output = ""
+            content = ""
+            subsections = []
             for item in tex_doc:
                 name = item.nodeName
+
                 if name.endswith("section"):
                     title = item.attributes["title"].textContent.strip()
                     underline = (
@@ -138,18 +157,27 @@ class Paper:
                         if "subsub" not in name
                         else ""
                     )
-                    value = "\n\n" + title + underline + "\n" + self.to_text(item)
+                    subcontent, subsubsections = self.build_content(item)
+                    value = "\n\n" + title + underline + "\n" + subcontent
+                    subsections.append(Section(title, subcontent, subsubsections))
+
                 elif name == "thebibliography":
-                    value = "\n\nReferences\n" + "=" * 10 + "\n" + self.to_text(item)
+                    bibcontent, _ = self.build_content(item)
+                    value = "\n\nReferences\n" + "=" * 10 + "\n" + bibcontent
+
                 elif name == "table":
                     try:
                         value = "\n\n" + self.parse_table(item.source) + "\n\n"
                     except:
                         value = self.to_text(item)
+
                 elif name in ("equation", "math", "displaymath"):
                     value = item.source
+
                 elif item.hasChildNodes():
-                    value = self.to_text(item)
+                    value, innersubsections = self.build_content(item)
+                    subsections.extend(innersubsections)
+
                 else:
                     value = item.source
 
@@ -158,27 +186,11 @@ class Paper:
                     if title:
                         value = title.textContent + " " + value
 
-                output += self.encode(value)
+                content += self.encode(value)
         except Exception as e:
-            print("ERROR", e)
             return tex_doc.textContent
 
-        return output
-
-    def node_text(self, node):
-        """Get the text content of the current node"""
-        if isinstance(node, str):
-            return node
-
-        output = ""
-        for item in node:
-            if item.nodeType == DOM.Node.TEXT_NODE:
-                output += item.textContent
-            else:
-                output += self.encode(item.source)
-
-        # TODO: do I want to use the strip inside the clean here?
-        return self.clean(output)
+        return content, subsections
 
     def parse_table(self, latex_src: DOM.Node):
         """
