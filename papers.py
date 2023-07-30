@@ -1,16 +1,15 @@
-import re
 import os
+import re
+import traceback
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
 import texttable
 from plasTeX import DOM, TeX
 from plasTeX.Logging import disableLogging
-from pylatexenc.latex2text import (
-    LatexNodes2Text,
-    MacroTextSpec,
-    get_default_latex_context_db,
-)
+from pylatexenc.latex2text import (EnvironmentTextSpec, LatexNodes2Text,
+                                   MacroTextSpec, get_default_latex_context_db)
+from pylatexenc.latexwalker import LatexMacroNode
 
 disableLogging()
 
@@ -22,13 +21,22 @@ class Section:
     subsections: Optional[List["Section"]] = None
 
 
-def handle_cite(node, l2tobj: LatexNodes2Text):
+def handle_cite(node: LatexMacroNode, l2tobj: LatexNodes2Text):
     citation_key = l2tobj.nodelist_to_text(node.nodeargd.argnlist)
     return f"<cit. {citation_key}>"
 
 
 def handle_includegraphics(node):
     return "<image>"
+
+def handle_href(node: LatexMacroNode, l2tobj):
+    return '[{}]({})'.format(
+        l2tobj.nodelist_to_text([node.nodeargd.argnlist[1]]),
+        l2tobj.nodelist_to_text([node.nodeargd.argnlist[0]])
+    )
+
+def handle_item(node: LatexMacroNode, l2tobj: LatexNodes2Text):
+    return l2tobj.node_to_text(node.nodeoptarg) if node.nodeoptarg else '- '
 
 
 class Paper:
@@ -43,7 +51,15 @@ class Paper:
                 MacroTextSpec("cite", simplify_repl=handle_cite),
                 MacroTextSpec("citep", simplify_repl=handle_cite),
                 MacroTextSpec("includegraphics", simplify_repl=handle_includegraphics),
+                MacroTextSpec("href", simplify_repl=handle_href),
+                MacroTextSpec("url", simplify_repl="%s"),
+                MacroTextSpec("item", simplify_repl=handle_item),
             ],
+            environments=[
+                EnvironmentTextSpec("enumerate", simplify_repl="\n%s"),
+                EnvironmentTextSpec("exenumerate", simplify_repl="\n%s"),
+                EnvironmentTextSpec("itemize", simplify_repl="\n%s"),
+            ]
         )
         self.l2t = LatexNodes2Text(latex_context=l2t_context_db)
 
@@ -116,7 +132,7 @@ class Paper:
             for i in key:
                 section = sections[i]
                 sections = section.subsections
-            return section.content
+            return section
 
     def __repr__(self):
         return "\n".join(self.table_of_contents([self.tree]))
@@ -162,8 +178,10 @@ class Paper:
                     subsections.append(Section(title, subcontent, subsubsections))
 
                 elif name == "thebibliography":
+                    # TODO: bibliography should be another section, outside of the last section.
                     bibcontent, _ = self.build_content(item)
                     value = "\n\nReferences\n" + "=" * 10 + "\n" + bibcontent
+                    subsections.append(Section("References", bibcontent))
 
                 elif name == "table":
                     try:
@@ -171,7 +189,7 @@ class Paper:
                     except:
                         value = self.to_text(item)
 
-                elif name in ("equation", "math", "displaymath"):
+                elif name in ("equation", "math", "displaymath", "itemize", "enumerate", "bibitem"):
                     value = item.source
 
                 elif item.hasChildNodes():
@@ -188,6 +206,7 @@ class Paper:
 
                 content += self.encode(value)
         except Exception as e:
+            print("Error:", str(e), traceback.format_exc())
             return tex_doc.textContent
 
         return content, subsections
