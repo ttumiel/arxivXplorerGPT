@@ -1,8 +1,8 @@
+import logging
 import os
 import re
 import traceback
-from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
+from typing import Dict, List, Tuple
 
 import texttable
 from plasTeX import DOM, TeX
@@ -11,14 +11,10 @@ from pylatexenc.latex2text import (EnvironmentTextSpec, LatexNodes2Text,
                                    MacroTextSpec, get_default_latex_context_db)
 from pylatexenc.latexwalker import LatexMacroNode
 
-disableLogging()
+from xplorer.paper import Paper, Section
 
-
-@dataclass
-class Section:
-    title: str
-    content: str
-    subsections: Optional[List["Section"]] = None
+# disableLogging()
+logger = logging.getLogger('latex_paper')
 
 
 def handle_cite(node: LatexMacroNode, l2tobj: LatexNodes2Text):
@@ -39,9 +35,11 @@ def handle_item(node: LatexMacroNode, l2tobj: LatexNodes2Text):
     return l2tobj.node_to_text(node.nodeoptarg) if node.nodeoptarg else '- '
 
 
-class Paper:
-    def __init__(self, filename):
+class LatexPaper(Paper):
+    def build(self, filename) -> Section:
         assert filename.endswith(".tex") and os.path.isfile(filename)
+        # os.environ["TEXINPUTS"] = os.path.dirname(filename)
+        # print(os.environ["TEXINPUTS"])
 
         l2t_context_db = get_default_latex_context_db()
         l2t_context_db.add_context_category(
@@ -63,79 +61,25 @@ class Paper:
         )
         self.l2t = LatexNodes2Text(latex_context=l2t_context_db)
 
-        tex = TeX.TeX(file=filename)
+        tex = TeX.TeX(myfile=filename)
         self.tex_doc = tex.parse()
-        self.tree = self.build_tree()
+        self._title = self.get_title(self.tex_doc)
+        tree = self.build_tree()
+        return tree
 
-    def table_of_contents(self, sections, level=0):
-        """
-        Generate a table of contents from a list of sections.
-
-        Each section is represented as a dictionary with keys 'title', 'content',
-        and 'subsections', where 'subsections' is a list of subsections in the
-        same format.
-
-        Returns:
-            List of strings, where each string represents a
-            line in the table of contents.
-        """
-        contents = []
-
-        for i, section in enumerate(sections, start=1):
-            title = section.title
-            indent = "  " * level
-            contents.append(f"{indent}{i}. {title}")
-
-            # Recursively generate the table of contents for the subsections
-            if section.subsections:
-                subsection_contents = self.table_of_contents(
-                    section.subsections, level=level + 1
-                )
-                contents.extend(subsection_contents)
-
-        return contents
-
-    def bibliography(self):
+    def build_bibliography(self) -> Dict[str, str]:
         return {
             bibitem.id: bibitem.textContent.strip()
             for bibitem in self.tex_doc.getElementsByTagName("bibitem")
         }
 
-    @property
-    def title(self):
-        title = self.tex_doc.userdata.get("title", None)
-        if title is None:
-            return "No Title"
-        return title.textContent
+    def build_title(self):
+        return self._title
 
-    @property
-    def sections(self):
-        return self.tree.subsections
-
-    @property
-    def subsections(self):
-        return [sub for section in self.tree.subsections for sub in section.subsections]
-
-    @property
-    def content(self):
-        return self.tree.content
-
-    @property
-    def toc(self):
-        return "\n".join(self.table_of_contents(self.tree.subsections))
-
-    def __getitem__(self, key: Union[int, Tuple[int]]):
-        if isinstance(key, int):
-            return self.tree.subsections[key]
-        else:
-            sections = self.tree.subsections
-            for i in key:
-                section = sections[i]
-                sections = section.subsections
-            return section
-
-    def __repr__(self):
-        return "\n".join(self.table_of_contents([self.tree]))
+    def get_title(self, tex_doc):
+        title = tex_doc.userdata.get("title", None)
+        if title is not None:
+            return title.textContent
 
     def encode(self, latex: str):
         try:
@@ -187,6 +131,7 @@ class Paper:
                     try:
                         value = "\n\n" + self.parse_table(item.source) + "\n\n"
                     except:
+                        logger.error("Failed to parse table.")
                         value = self.to_text(item)
 
                 elif name in ("equation", "math", "displaymath", "itemize", "enumerate", "bibitem"):
@@ -206,7 +151,7 @@ class Paper:
 
                 content += self.encode(value)
         except Exception as e:
-            print("Error:", str(e), traceback.format_exc())
+            logger.error("Error parsing latex: " + str(e) + "\n" + traceback.format_exc())
             return tex_doc.textContent
 
         return content, subsections
@@ -286,23 +231,39 @@ class Paper:
 
         return output
 
-    def extract_nodes(self) -> List[Section]:
-        """
-        Iterate through a latex doc, generating a tree
-        of sections and subsections, up to `levels` depth..
-        """
-        sections = self.tex_doc.getElementsByTagName("section")
-        return [
-            Section(
-                section.attributes["title"].textContent,
-                self.clean(self.to_text(section)),
-                [
-                    Section(
-                        subsection.attributes["title"].textContent,
-                        self.clean(self.to_text(subsection)),
-                    )
-                    for subsection in section.getElementsByTagName("subsection")
-                ],
-            )
-            for section in sections
-        ]
+
+def guess_main_tex_file(directory):
+    candidates = []
+
+    for filename in os.listdir(directory):
+        if not filename.endswith(".tex"):
+            continue
+
+        with open(os.path.join(directory, filename), "r") as file:
+            contents = file.read()
+
+        if (
+            re.search(r"\\documentclass", contents)
+            or (re.search(r"\\begin{document}", contents)
+            and re.search(r"\\end{document}", contents))
+        ):
+            candidates.append(filename)
+
+    if not candidates:
+        if os.path.exists(os.path.join(directory, "main.tex")):
+            logger.info("Guessing main.tex")
+            return "main.tex"
+
+        candidates = os.listdir(directory)
+
+    # If there are multiple candidates, guess the largest file is the main one
+    largest_candidate = max(
+        candidates,
+        key=lambda filename: os.path.getsize(os.path.join(directory, filename)),
+    )
+    logger.info(f"Guessing largest file: {largest_candidate}")
+    return os.path.join(directory, largest_candidate)
+
+# p = LatexPaper("/home/sara/Documents/semanticXplorer/xplorer-plugin/test/data/resnet/1512.03385/residual_v1_arxiv_release.tex")
+# p = LatexPaper("/home/sara/Documents/semanticXplorer/xplorer-plugin/test/data/transformer/1706.03762/ms.tex")
+# print(p.table_of_contents)
