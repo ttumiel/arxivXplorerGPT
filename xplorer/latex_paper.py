@@ -61,7 +61,7 @@ class LatexPaper(Paper):
         )
         self.l2t = LatexNodes2Text(latex_context=l2t_context_db)
 
-        tex = TeX.TeX(myfile=filename)
+        tex = TeX.TeX(file=filename)
         self.tex_doc = tex.parse()
         self._title = self.get_title(self.tex_doc)
         tree = self.build_tree()
@@ -265,5 +265,11 @@ def guess_main_tex_file(directory):
     return os.path.join(directory, largest_candidate)
 
 # p = LatexPaper("/home/sara/Documents/semanticXplorer/xplorer-plugin/test/data/resnet/1512.03385/residual_v1_arxiv_release.tex")
-# p = LatexPaper("/home/sara/Documents/semanticXplorer/xplorer-plugin/test/data/transformer/1706.03762/ms.tex")
-# print(p.table_of_contents)
+p = LatexPaper("/home/sara/Documents/semanticXplorer/xplorer-plugin/test/data/transformer/1706.03762/ms.tex")
+print(p.table_of_contents)
+data = p.dumps()
+import json
+
+print(json.loads(data).keys())
+new_paper = Paper.loads(data)
+print(p.table_of_contents)
