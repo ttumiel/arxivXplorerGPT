@@ -29,7 +29,9 @@ class PDFPaper(Paper):
                     body_text = self._fetch_content(content, self.title) if self._title else content
                     tree.subsections = self.unflatten_sections(body_text, outline)
                 except Exception as e:
-                    logging.error("Error parsing PDF: " + str(e))
+                    logger.error("Error parsing PDF: " + str(e))
+            else:
+                logger.warning("PDF is not extractable.")
 
         return tree
 
@@ -40,12 +42,12 @@ class PDFPaper(Paper):
         return self._title
 
     def _clean_title(self, title):
-        return re.sub(r"^\d+(\.\d+)*\.?\s*", "", title).strip()
+        return re.sub(r"^\s*(?:\d+(\.\d*)*\.?|[a-zA-Z\d\.]+\s+)\s*", "", title).strip()
 
     def _try_fetch_content(self, text_group, start: str, end: str = None) -> Optional[str]:
-        pattern = rf"[^\n]\s*(?:\d+(?:\.\d+)*\s*)?{re.escape(start)}\s*\n+([\s\S]+?)"
+        pattern = rf"(?:^|\n)\s*(?:[A-Z\d\.]+\s*)?(?:\d+(?:\.\d*)*\s*)?{re.escape(start)}\s*\n+([\s\S]+?)"
         if end is not None:
-            pattern += rf"\n+\d+(?:\.\d+)*\s*{re.escape(end)}"
+            pattern += rf"\n+\s*(?:[A-Z\d\.]+\s*)?(?:\d+(?:\.\d*)*\s*)?{re.escape(end)}"
         else:
             pattern += r"$"
 
