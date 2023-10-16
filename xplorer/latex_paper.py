@@ -5,16 +5,20 @@ import traceback
 from typing import Dict, List, Tuple
 
 import texttable
-from plasTeX import DOM, TeX
+from plasTeX import DOM, TeX, Macro, TeXDocument, Config
 from plasTeX.Logging import disableLogging
-from pylatexenc.latex2text import (EnvironmentTextSpec, LatexNodes2Text,
-                                   MacroTextSpec, get_default_latex_context_db)
+from pylatexenc.latex2text import (
+    EnvironmentTextSpec,
+    LatexNodes2Text,
+    MacroTextSpec,
+    get_default_latex_context_db,
+)
 from pylatexenc.latexwalker import LatexMacroNode
 
 from xplorer.paper import Paper, Section
 
-# disableLogging()
-logger = logging.getLogger('latex_paper')
+disableLogging()
+logger = logging.getLogger("latex_paper")
 
 
 def handle_cite(node: LatexMacroNode, l2tobj: LatexNodes2Text):
@@ -25,21 +29,21 @@ def handle_cite(node: LatexMacroNode, l2tobj: LatexNodes2Text):
 def handle_includegraphics(node):
     return "<image>"
 
+
 def handle_href(node: LatexMacroNode, l2tobj):
-    return '[{}]({})'.format(
+    return "[{}]({})".format(
         l2tobj.nodelist_to_text([node.nodeargd.argnlist[1]]),
-        l2tobj.nodelist_to_text([node.nodeargd.argnlist[0]])
+        l2tobj.nodelist_to_text([node.nodeargd.argnlist[0]]),
     )
 
+
 def handle_item(node: LatexMacroNode, l2tobj: LatexNodes2Text):
-    return l2tobj.node_to_text(node.nodeoptarg) if node.nodeoptarg else '- '
+    return l2tobj.node_to_text(node.nodeoptarg) if node.nodeoptarg else "- "
 
 
 class LatexPaper(Paper):
     def build(self, filename) -> Section:
         assert filename.endswith(".tex") and os.path.isfile(filename)
-        # os.environ["TEXINPUTS"] = os.path.dirname(filename)
-        # print(os.environ["TEXINPUTS"])
 
         l2t_context_db = get_default_latex_context_db()
         l2t_context_db.add_context_category(
@@ -57,11 +61,14 @@ class LatexPaper(Paper):
                 EnvironmentTextSpec("enumerate", simplify_repl="\n%s"),
                 EnvironmentTextSpec("exenumerate", simplify_repl="\n%s"),
                 EnvironmentTextSpec("itemize", simplify_repl="\n%s"),
-            ]
+            ],
         )
         self.l2t = LatexNodes2Text(latex_context=l2t_context_db)
 
-        tex = TeX.TeX(file=filename)
+        config = Config.defaultConfig()
+        config["general"]["load-tex-packages"] = False
+        ownerDocument = TeXDocument(config=config)
+        tex = TeX.TeX(file=filename, ownerDocument=ownerDocument)
         self.tex_doc = tex.parse()
         self._title = self.get_title(self.tex_doc)
         tree = self.build_tree()
@@ -104,10 +111,11 @@ class LatexPaper(Paper):
 
     def build_content(self, tex_doc: TeX.TeXDocument) -> Tuple[str, List[Section]]:
         """Get the text content of the current node"""
-        try:
-            content = ""
-            subsections = []
-            for item in tex_doc:
+
+        content = ""
+        subsections = []
+        for item in tex_doc:
+            try:
                 name = item.nodeName
 
                 if name.endswith("section"):
@@ -130,11 +138,18 @@ class LatexPaper(Paper):
                 elif name == "table":
                     try:
                         value = "\n\n" + self.parse_table(item.source) + "\n\n"
-                    except:
-                        logger.error("Failed to parse table.")
-                        value = self.to_text(item)
+                    except Exception as e:
+                        logger.error(f"Failed to parse table: {e}")
+                        value = "\n\n" + item.source + "\n\n"
 
-                elif name in ("equation", "math", "displaymath", "itemize", "enumerate", "bibitem"):
+                elif name in (
+                    "equation",
+                    "math",
+                    "displaymath",
+                    "itemize",
+                    "enumerate",
+                    "bibitem",
+                ):
                     value = item.source
 
                 elif item.hasChildNodes():
@@ -150,9 +165,16 @@ class LatexPaper(Paper):
                         value = title.textContent + " " + value
 
                 content += self.encode(value)
-        except Exception as e:
-            logger.error("Error parsing latex: " + str(e) + "\n" + traceback.format_exc())
-            return tex_doc.textContent
+            except Exception as e:
+                logger.error(
+                    "Error parsing latex: "
+                    + str(e)
+                    + "\n"
+                    + traceback.format_exc()
+                    + "\n"
+                    + item.source
+                )
+                content += item.textContent
 
         return content, subsections
 
@@ -242,10 +264,9 @@ def guess_main_tex_file(directory):
         with open(os.path.join(directory, filename), "r") as file:
             contents = file.read()
 
-        if (
-            re.search(r"\\documentclass", contents)
-            or (re.search(r"\\begin{document}", contents)
-            and re.search(r"\\end{document}", contents))
+        if re.search(r"\\documentclass", contents) or (
+            re.search(r"\\begin{document}", contents)
+            and re.search(r"\\end{document}", contents)
         ):
             candidates.append(filename)
 
@@ -264,12 +285,13 @@ def guess_main_tex_file(directory):
     logger.info(f"Guessing largest file: {largest_candidate}")
     return os.path.join(directory, largest_candidate)
 
-# p = LatexPaper("/home/sara/Documents/semanticXplorer/xplorer-plugin/test/data/resnet/1512.03385/residual_v1_arxiv_release.tex")
-p = LatexPaper("/home/sara/Documents/semanticXplorer/xplorer-plugin/test/data/transformer/1706.03762/ms.tex")
-print(p.table_of_contents)
-data = p.dumps()
-import json
 
-print(json.loads(data).keys())
-new_paper = Paper.loads(data)
-print(p.table_of_contents)
+# p = LatexPaper("/home/sara/Documents/semanticXplorer/xplorer-plugin/test/data/resnet/1512.03385/residual_v1_arxiv_release.tex")
+# p = LatexPaper("/home/sara/Documents/semanticXplorer/xplorer-plugin/test/data/transformer/1706.03762/ms.tex")
+# print(p.table_of_contents)
+# data = p.dumps()
+# import json
+
+# print(json.loads(data).keys())
+# new_paper = Paper.loads(data)
+# print(p.table_of_contents)
