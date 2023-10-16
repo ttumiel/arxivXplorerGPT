@@ -66,8 +66,9 @@ class PaperData:
 
     @classmethod
     def load(cls, data: Dict[str, Optional[str]]):
-        data["paper"] = Paper.loads(data["paper"])
-        return cls(**data)
+        data = cls(**data)
+        data.paper = Paper.loads(data.paper)
+        return data
 
 
 class PaperCache:
