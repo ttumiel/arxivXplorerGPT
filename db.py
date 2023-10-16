@@ -6,10 +6,9 @@ import re
 import tarfile
 import tempfile
 from abc import ABC, abstractmethod
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, wait
 from dataclasses import dataclass, fields
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Optional, TypedDict, TypeVar
+from typing import Dict, List, Optional, TypedDict, TypeVar
 
 import arxiv
 import requests
@@ -17,7 +16,6 @@ from google.cloud import storage
 
 from xplorer.latex_paper import LatexPaper, Paper, guess_main_tex_file
 from xplorer.pdf_paper import PDFPaper
-from time import time
 
 logger = logging.getLogger(__file__)
 
