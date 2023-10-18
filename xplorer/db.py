@@ -113,7 +113,9 @@ class PaperCache:
         with tarfile.open(tar_path, "r:gz") as tar:
             tar.extractall(path=output_dir)
 
-    def fetch_pdf_paper(self, arxiv_id, output_dir, title: Optional[str] = None) -> PDFPaper:
+    def fetch_pdf_paper(
+        self, arxiv_id, output_dir, title: Optional[str] = None
+    ) -> PDFPaper:
         try:
             bucket_name = "arxiv-dataset"
             storage_client = storage.Client()
@@ -144,7 +146,9 @@ class PaperCache:
 
         return output_dir
 
-    def fetch_source_paper(self, paper_id, output_dir, title: Optional[str] = None) -> LatexPaper:
+    def fetch_source_paper(
+        self, paper_id, output_dir, title: Optional[str] = None
+    ) -> LatexPaper:
         # TODO: parallel download, and set timeout for parsing
         try:
             # Download the source

@@ -5,7 +5,7 @@ import traceback
 from typing import Dict, List, Tuple
 
 import texttable
-from plasTeX import DOM, TeX, Macro, TeXDocument, Config
+from plasTeX import DOM, Config, TeX, TeXDocument
 from plasTeX.Logging import disableLogging
 from pylatexenc.latex2text import (
     EnvironmentTextSpec,
@@ -144,11 +144,14 @@ class LatexPaper(Paper):
 
                 elif name in (
                     "equation",
+                    "equation*",
                     "math",
                     "displaymath",
                     "itemize",
                     "enumerate",
                     "bibitem",
+                    "align",
+                    "align*",
                 ):
                     value = item.source
 
@@ -284,14 +287,3 @@ def guess_main_tex_file(directory):
     )
     logger.info(f"Guessing largest file: {largest_candidate}")
     return os.path.join(directory, largest_candidate)
-
-
-# p = LatexPaper("/home/sara/Documents/semanticXplorer/xplorer-plugin/test/data/resnet/1512.03385/residual_v1_arxiv_release.tex")
-# p = LatexPaper("/home/sara/Documents/semanticXplorer/xplorer-plugin/test/data/transformer/1706.03762/ms.tex")
-# print(p.table_of_contents)
-# data = p.dumps()
-# import json
-
-# print(json.loads(data).keys())
-# new_paper = Paper.loads(data)
-# print(p.table_of_contents)

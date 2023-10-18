@@ -9,14 +9,16 @@ from pdfminer.pdfparser import PDFParser
 
 from xplorer.paper import Paper, Section
 
-logger = logging.getLogger('pdf_paper')
+logger = logging.getLogger("pdf_paper")
 
 
 class PDFPaper(Paper):
     def build(self, filename) -> Section:
-        assert filename.endswith(".pdf") and os.path.isfile(filename), "Invalid PDF file"
+        assert filename.endswith(".pdf") and os.path.isfile(
+            filename
+        ), "Invalid PDF file"
 
-        with open(filename, 'rb') as f:
+        with open(filename, "rb") as f:
             content = extract_text(f)
             parser = PDFParser(f)
             doc = PDFDocument(parser)
@@ -25,8 +27,15 @@ class PDFPaper(Paper):
 
             if doc.is_extractable:
                 try:
-                    outline = [(level, self._clean_title(title)) for level, title, *_ in doc.get_outlines()]
-                    body_text = self._fetch_content(content, self.title) if self._title else content
+                    outline = [
+                        (level, self._clean_title(title))
+                        for level, title, *_ in doc.get_outlines()
+                    ]
+                    body_text = (
+                        self._fetch_content(content, self.title)
+                        if self._title
+                        else content
+                    )
                     tree.subsections = self.unflatten_sections(body_text, outline)
                 except Exception as e:
                     logger.error("Error parsing PDF: " + str(e))
@@ -44,7 +53,9 @@ class PDFPaper(Paper):
     def _clean_title(self, title):
         return re.sub(r"^\s*(?:\d+(\.\d*)*\.?|[a-zA-Z\d\.]+\s+)\s*", "", title).strip()
 
-    def _try_fetch_content(self, text_group, start: str, end: str = None) -> Optional[str]:
+    def _try_fetch_content(
+        self, text_group, start: str, end: str = None
+    ) -> Optional[str]:
         pattern = rf"(?:^|\n)\s*(?:[A-Z\d\.]+\s*)?(?:\d+(?:\.\d*)*\s*)?{re.escape(start)}\s*\n+([\s\S]+?)"
         if end is not None:
             pattern += rf"\n+\s*(?:[A-Z\d\.]+\s*)?(?:\d+(?:\.\d*)*\s*)?{re.escape(end)}"
@@ -56,7 +67,9 @@ class PDFPaper(Paper):
         if match:
             return match.group(1)
 
-    def unflatten_sections(self, text: str, section_numbers: List[Tuple[str, str]]) -> List[Section]:
+    def unflatten_sections(
+        self, text: str, section_numbers: List[Tuple[str, str]]
+    ) -> List[Section]:
 
         sections = []
         i = 0
@@ -66,7 +79,7 @@ class PDFPaper(Paper):
             # if there are subsections, then recursively create those
             # otherwise just append the section to the subsections list
             sub_numbers = []
-            for l, t in section_numbers[i + 1:]:
+            for l, t in section_numbers[i + 1 :]:
                 if l == level:
                     break
                 elif l > level:
@@ -82,6 +95,6 @@ class PDFPaper(Paper):
         return sections
 
     def get_title(self, doc: PDFDocument):
-        title = doc.info[0]['Title']
+        title = doc.info[0]["Title"]
         if title:
             return decode_text(title)
