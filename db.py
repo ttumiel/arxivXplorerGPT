@@ -8,7 +8,7 @@ import tempfile
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, fields
 from datetime import datetime
-from typing import Dict, List, Optional, TypedDict, TypeVar
+from typing import Dict, List, Optional, TypedDict
 
 import arxiv
 import requests
@@ -18,8 +18,6 @@ from xplorer.latex_paper import LatexPaper, Paper, guess_main_tex_file
 from xplorer.pdf_paper import PDFPaper
 
 logger = logging.getLogger(__file__)
-
-T = TypeVar("T")
 
 
 class PaperDataDict(TypedDict, total=False):
@@ -80,7 +78,7 @@ class PaperCache:
         paper_data = self.db[paper_id]
         if paper_data is None:
             paper_data = self.get_paper_details(paper_id)
-            paper = self.fetch_paper(paper_id)
+            paper = self.fetch_paper(paper_id, paper_data.title)
             paper_data.paper = paper
             paper_data.has_bibliography = paper.has_bibliography
             paper_data.table_of_contents = paper.table_of_contents
@@ -115,7 +113,7 @@ class PaperCache:
         with tarfile.open(tar_path, "r:gz") as tar:
             tar.extractall(path=output_dir)
 
-    def fetch_pdf_paper(self, arxiv_id, output_dir) -> PDFPaper:
+    def fetch_pdf_paper(self, arxiv_id, output_dir, title: Optional[str] = None) -> PDFPaper:
         try:
             bucket_name = "arxiv-dataset"
             storage_client = storage.Client()
@@ -129,7 +127,7 @@ class PaperCache:
             destination_file_name = os.path.join(output_dir, f"{arxiv_id}.pdf")
             blob.download_to_filename(destination_file_name)
 
-            return PDFPaper(destination_file_name)
+            return PDFPaper(destination_file_name, title=title)
         except Exception as e:
             logger.error(f"Error fetching pdf paper: {e}")
             return None
@@ -146,8 +144,8 @@ class PaperCache:
 
         return output_dir
 
-    def fetch_source_paper(self, paper_id, output_dir) -> LatexPaper:
-        # TODO: parallel download, and set timeout
+    def fetch_source_paper(self, paper_id, output_dir, title: Optional[str] = None) -> LatexPaper:
+        # TODO: parallel download, and set timeout for parsing
         try:
             # Download the source
             filename = self.download_arxiv_source(paper_id, output_dir)
@@ -161,19 +159,19 @@ class PaperCache:
 
             # Extract the text
             main_file = guess_main_tex_file(datadir)
-            return LatexPaper(main_file)
+            return LatexPaper(main_file, title=title)
         except Exception as e:
             logger.error(f"Error fetching latex paper: {e}")
             return None
 
-    def fetch_paper(self, paper_id: str) -> Paper:
+    def fetch_paper(self, paper_id: str, title: str) -> Paper:
         """Attempt to download and parse an arxiv paper. First from latex source
         and then from the PDF, if the source fails.
         """
         with tempfile.TemporaryDirectory() as tmpdirname:
-            paper = self.fetch_source_paper(paper_id, tmpdirname)
+            paper = self.fetch_source_paper(paper_id, tmpdirname, title)
             if paper is None:
-                paper = self.fetch_pdf_paper(paper_id, tmpdirname)
+                paper = self.fetch_pdf_paper(paper_id, tmpdirname, title)
 
         assert paper, "Couldn't fetch paper."
         return paper
