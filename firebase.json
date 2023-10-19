@@ -1,0 +1,56 @@
+{
+    "functions": [
+        {
+            "source": "functions",
+            "codebase": "default",
+            "runtime": "python311",
+            "ignore": [
+                "venv",
+                ".git",
+                "*.log",
+                "test"
+            ]
+        }
+    ],
+    "hosting": {
+        "public": "public",
+        "rewrites": [
+            {
+                "source": "/search",
+                "function": "search"
+            },
+            {
+                "source": "/read_paper_metadata",
+                "function": "read_paper_metadata"
+            },
+            {
+                "source": "/read_section",
+                "function": "read_section"
+            },
+            {
+                "source": "/read_citation",
+                "function": "read_citation"
+            },
+            {
+                "source": "/chunk_search",
+                "function": "chunk_search"
+            }
+        ],
+        "ignore": [
+            "firebase.json",
+            "**/.*",
+            "test"
+        ],
+        "headers": [
+            {
+                "source": "**/*.@(json|yaml|yml)",
+                "headers": [
+                    {
+                        "key": "Access-Control-Allow-Origin",
+                        "value": "*"
+                    }
+                ]
+            }
+        ]
+    }
+}

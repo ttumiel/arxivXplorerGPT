@@ -6,7 +6,6 @@ from typing import List, Optional, Tuple
 from pdfminer.high_level import extract_text
 from pdfminer.pdfdocument import PDFDocument, decode_text
 from pdfminer.pdfparser import PDFParser
-
 from xplorer.paper import Paper, Section
 
 logger = logging.getLogger("pdf_paper")

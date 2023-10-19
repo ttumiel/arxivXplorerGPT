@@ -10,7 +10,6 @@ import arxiv
 import requests
 from chat2func import json_schema
 from chat2func.server import FunctionServer
-
 from xplorer.db import PaperCache, PaperData, PaperDataDict
 
 logger = logging.getLogger(__name__)
@@ -85,10 +84,10 @@ class ArxivXplorerAPI:
 
         Args:
             query (str): The user's query.
-            count (int, optional): The number of results to return. Defaults to 6.
-            page (int, optional): The page of results to return. Defaults to 1.
-            year (int, optional): The year to filter results by. Defaults to None, for any year.
-            method (SearchMethod, optional): The search method to use. Defaults to semantic search.
+            count (int): The number of results to return. Defaults to 5.
+            page (int): Pagination index. Defaults to 1.
+            year (int): The year to filter results by. Defaults to None, for any year.
+            method (SearchMethod): The search method to use. Defaults to semantic search.
         """
         if method == SearchMethod.KEYWORD:
             return self._arxiv_search(query, count, page)
@@ -100,8 +99,14 @@ class ArxivXplorerAPI:
     def chunk_search(
         self, paper_id: str, query: str, count: int = 3, page: int = 1
     ) -> List[str]:
-        """Perform semantic search for a query across 250 word chunks
-        of a paper's sections."""
+        """Perform semantic search for a query across 250 word chunks of a paper's sections.
+
+        Args:
+            paper_id (str): arxiv ID.
+            query (str): The user's query.
+            count (int): The number of results to return. Defaults to 3.
+            page (int): Pagination index. Defaults to 1.
+        """
         paper_data = self[paper_id]
         paper = paper_data.paper
         should_update = paper.store is None
@@ -114,7 +119,8 @@ class ArxivXplorerAPI:
     @json_schema(full_docstring=True)
     @error_logger
     def read_paper_metadata(self, paper_id: str, show_abstract=False) -> PaperDataDict:
-        """Read the metadata of a paper, where available.
+        """Read the metadata of a paper, where available. Including the paper's id,
+        title, date, authors, abstract, table_of_contents, has_bibliography.
 
         Args:
             paper_id (str): arxiv ID.
@@ -168,11 +174,10 @@ class ArxivXplorerAPI:
     @json_schema
     @error_logger
     def read_citation(self, paper_id: str, citation: str) -> str:
-        """Lookup a particular citation id of a paper, if
-        paper_metadata.has_bibliography == True.
+        """Lookup a particular citation id of a paper, if paper_metadata.has_bibliography == True.
 
         Args:
-            paper_id (str): The arxiv ID of the paper.
+            paper_id (str): arxiv ID.
             citation (str): The citation ID to lookup. e.g. `demo` from the citation `<cit. demo>`
         """
         # TODO: some of the citations look mangled: <cit. J>onasFaceNet2017
@@ -258,18 +263,18 @@ class ArxivXplorerAPI:
         return None
 
 
-api = ArxivXplorerAPI()
-server = FunctionServer(
-    {
-        "search": api.search,
-        "read_paper_metadata": api.read_paper_metadata,
-        "read_full_paper": api.read_full_paper,
-        "read_section": api.read_section,
-        "read_citation": api.read_citation,
-        "chunk_search": api.chunk_search,
-    }
-)
-server.run(debug=True)
+# api = ArxivXplorerAPI()
+# server = FunctionServer(
+#     {
+#         "search": api.search,
+#         "read_paper_metadata": api.read_paper_metadata,
+#         "read_full_paper": api.read_full_paper,
+#         "read_section": api.read_section,
+#         "read_citation": api.read_citation,
+#         "chunk_search": api.chunk_search,
+#     }
+# )
+# server.run(debug=True)
 
 # import json
 # server.app.config["TESTING"] = True

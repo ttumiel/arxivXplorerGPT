@@ -1,0 +1,156 @@
+info:
+  description: Discover, read, reference, and search through all arXiv papers.
+  title: arXiv Xplorer
+  version: v1
+openapi: 3.0.1
+paths:
+  /chunk_search:
+    post:
+      operationId: chunk_search
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                count:
+                  description: The number of results to return. Defaults to 3.
+                  type: integer
+                page:
+                  description: Pagination index. Defaults to 1.
+                  type: integer
+                paper_id:
+                  description: arxiv ID.
+                  type: string
+                query:
+                  description: The user's query.
+                  type: string
+              required:
+              - paper_id
+              - query
+              type: object
+        required: true
+      responses:
+        '200':
+          description: OK
+      summary: Perform semantic search for a query across 250 word chunks of a paper's
+        sections.
+  /read_citation:
+    post:
+      operationId: read_citation
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                citation:
+                  description: The citation ID to lookup. e.g. `demo` from the citation
+                    `<cit. demo>`
+                  type: string
+                paper_id:
+                  description: arxiv ID.
+                  type: string
+              required:
+              - paper_id
+              - citation
+              type: object
+        required: true
+      responses:
+        '200':
+          description: OK
+      summary: Lookup a particular citation id of a paper, if paper_metadata.has_bibliography == True.
+  /read_paper_metadata:
+    post:
+      operationId: read_paper_metadata
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                paper_id:
+                  description: arxiv ID.
+                  type: string
+                show_abstract:
+                  description: Include the abstract in the response. Defaults to False.
+                  type: boolean
+              required:
+              - paper_id
+              type: object
+        required: true
+      responses:
+        '200':
+          description: OK
+      summary: 'Read the metadata of a paper, where available. Including the paper''s
+        id, title, date, authors, abstract, table_of_contents, has_bibliography.'
+  /read_section:
+    post:
+      operationId: read_section
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                paper_id:
+                  description: arxiv ID.
+                  type: string
+                section_id:
+                  anyOf:
+                  - type: integer
+                  - items:
+                      type: integer
+                    type: array
+                  description: 1-indexed section ID, or list of subsection ids.
+              required:
+              - paper_id
+              - section_id
+              type: object
+        required: true
+      responses:
+        '200':
+          description: OK
+      summary: Read a specific section from the table of contents of a paper.
+  /search:
+    post:
+      operationId: search
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                count:
+                  description: The number of results to return. Defaults to 5.
+                  type: integer
+                method:
+                  description: The search method to use. Defaults to semantic search.
+                  enum:
+                  - keyword
+                  - semantic
+                  - similarity
+                  type: string
+                page:
+                  description: Pagination index. Defaults to 1.
+                  type: integer
+                query:
+                  description: The user's query.
+                  type: string
+                year:
+                  description: The year to filter results by. Defaults to None, for
+                    any year.
+                  type: integer
+              required:
+              - query
+              type: object
+        required: true
+      responses:
+        '200':
+          description: OK
+      summary: 'Searches for arxiv articles using the user''s query.
+
+        Semantic search is preferred unless you want an exact keyword, or you want
+        an exact paper.
+
+        Similarity search will find similar results given an arxiv paper ID or URL.'

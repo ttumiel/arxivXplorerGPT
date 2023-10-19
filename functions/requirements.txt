@@ -1,0 +1,8 @@
+firebase-functions
+chat2func
+# Append all other project requirements here:
+plasTeX
+pylatexenc
+texttable
+requests
+pdfminer.six

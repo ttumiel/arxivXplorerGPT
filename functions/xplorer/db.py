@@ -13,7 +13,6 @@ from typing import Dict, List, Optional, TypedDict
 import arxiv
 import requests
 from google.cloud import storage
-
 from xplorer.latex_paper import LatexPaper, Paper, guess_main_tex_file
 from xplorer.pdf_paper import PDFPaper
 

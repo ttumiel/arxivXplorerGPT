@@ -136,14 +136,9 @@ class Paper(ABC):
     def chunk_search(self, query: str, count: int = 3):
         "Search for a particular chunk based on a text query"
         if self.store is None:
-            import time
-
-            print("Building vector store...")
-            s = time.time()
             chunks = self.chunk_tree()
             self.store = VectorStore()
             self.store.embed(chunks)
-            print(f"Done embedding. Took {time.time() - s:.2f} seconds.")
 
         return self.store.search(query, count)
 

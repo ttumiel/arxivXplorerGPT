@@ -7,14 +7,9 @@ from typing import Dict, List, Tuple
 import texttable
 from plasTeX import DOM, Config, TeX, TeXDocument
 from plasTeX.Logging import disableLogging
-from pylatexenc.latex2text import (
-    EnvironmentTextSpec,
-    LatexNodes2Text,
-    MacroTextSpec,
-    get_default_latex_context_db,
-)
+from pylatexenc.latex2text import (EnvironmentTextSpec, LatexNodes2Text,
+                                   MacroTextSpec, get_default_latex_context_db)
 from pylatexenc.latexwalker import LatexMacroNode
-
 from xplorer.paper import Paper, Section
 
 disableLogging()
@@ -141,6 +136,7 @@ class LatexPaper(Paper):
                     except Exception as e:
                         logger.error(f"Failed to parse table: {e}")
                         value = "\n\n" + item.source + "\n\n"
+                    value = self.encode(value)
 
                 elif name in (
                     "equation",
@@ -153,21 +149,21 @@ class LatexPaper(Paper):
                     "align",
                     "align*",
                 ):
-                    value = item.source
+                    value = self.encode(item.source)
 
                 elif item.hasChildNodes():
                     value, innersubsections = self.build_content(item)
                     subsections.extend(innersubsections)
 
                 else:
-                    value = item.source
+                    value = self.encode(item.source)
 
                 if item.attributes and not name.endswith("section"):
                     title = item.attributes.get("title", None)
                     if title:
                         value = title.textContent + " " + value
 
-                content += self.encode(value)
+                content += value
             except Exception as e:
                 logger.error(
                     "Error parsing latex: "

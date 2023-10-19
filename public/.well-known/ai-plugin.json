@@ -1,0 +1,17 @@
+{
+    "schema_version": "v1",
+    "name_for_human": "arXiv Xplorer",
+    "name_for_model": "arxivXplorer",
+    "description_for_human": "Discover, read, reference, and search through all arXiv papers.",
+    "description_for_model": "Discover, read, reference, and search through all arXiv papers using semantic search.",
+    "auth": {
+        "type": "none"
+    },
+    "api": {
+        "type": "openapi",
+        "url": "http://localhost:3333/openapi.yaml"
+    },
+    "logo_url": "http://localhost:3333/logo.png",
+    "contact_email": "legal@arxivxplorer.com",
+    "legal_info_url": "http://arxivxplorer.com/legal"
+}
