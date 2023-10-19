@@ -16,7 +16,11 @@ def request_handler(fn=None, allow_cors=True):
         return functools.partial(request_handler, allow_cors=allow_cors)
 
     @https_fn.on_request(
-        cors=options.CorsOptions(cors_origins=[r"*"], cors_methods=["get", "post"])
+        cors=options.CorsOptions(cors_origins=[r"*"], cors_methods=["get", "post"]),
+        memory=options.MemoryOption.GB_2,
+        region=options.SupportedRegion.US_WEST1,
+        max_instances=10,
+        cpu=1,
     )
     @functools.wraps(fn)
     def thunk(request: https_fn.Request):
@@ -41,11 +45,6 @@ def chunk_search(paper_id: str, query: str, count: int = 3, page: int = 1):
 @request_handler
 def read_paper_metadata(paper_id: str, show_abstract=False):
     return api.read_paper_metadata(paper_id, show_abstract)
-
-
-@request_handler
-def read_full_paper(paper_id: str):
-    return api.read_full_paper(paper_id)
 
 
 @request_handler

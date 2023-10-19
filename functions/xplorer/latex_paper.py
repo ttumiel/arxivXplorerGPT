@@ -21,9 +21,9 @@ def local_kpsewhich(self, name):
     try:
         srcDir = os.path.dirname(self.filename)
     except AttributeError:
-        srcDir = '.'
+        srcDir = "."
 
-    texinputs = os.environ.get("TEXINPUTS", '.').split(os.path.pathsep)
+    texinputs = os.environ.get("TEXINPUTS", ".").split(os.path.pathsep)
     search_paths = [srcDir] + texinputs
 
     # Search for the file in the source directory and TEXINPUTS
@@ -42,6 +42,7 @@ def local_kpsewhich(self, name):
                 return os.path.abspath(os.path.join(path, candidate))
 
     raise FileNotFoundError(f"Could not find any file named: {name}")
+
 
 # Monkey patch the method onto the Tex class
 TeX.TeX.kpsewhich = local_kpsewhich

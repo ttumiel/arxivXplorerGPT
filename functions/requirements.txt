@@ -1,8 +1,13 @@
+firebase-admin
 firebase-functions
 chat2func
 # Append all other project requirements here:
+arxiv
 plasTeX
 pylatexenc
 texttable
 requests
 pdfminer.six
+numpy
+openai
+tenacity

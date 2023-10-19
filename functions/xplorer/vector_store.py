@@ -2,7 +2,6 @@ from typing import List, Optional
 
 import numpy as np
 import openai
-from sklearn.decomposition import PCA
 from tenacity import retry, stop_after_attempt, wait_random_exponential
 
 

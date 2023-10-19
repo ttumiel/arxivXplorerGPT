@@ -8,7 +8,7 @@ from pdfminer.pdfdocument import PDFDocument, decode_text
 from pdfminer.pdfparser import PDFParser
 from xplorer.paper import Paper, Section
 
-logger = logging.getLogger("pdf_paper")
+logger = logging.getLogger(__name__)
 
 
 class PDFPaper(Paper):

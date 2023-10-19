@@ -3,6 +3,7 @@
 import logging
 import os
 import re
+import shutil
 import tarfile
 import tempfile
 from abc import ABC, abstractmethod
@@ -16,7 +17,7 @@ from google.cloud import storage
 from xplorer.latex_paper import LatexPaper, Paper, guess_main_tex_file
 from xplorer.pdf_paper import PDFPaper
 
-logger = logging.getLogger(__file__)
+logger = logging.getLogger(__name__)
 
 
 class PaperDataDict(TypedDict, total=False):
@@ -162,9 +163,16 @@ class PaperCache:
 
             # Extract the text
             main_file = guess_main_tex_file(datadir)
-            return LatexPaper(main_file, title=title)
+            paper = LatexPaper(main_file, title=title)
+
+            # Remove the extracted files
+            shutil.rmtree(datadir)
+
+            return paper
         except Exception as e:
-            logger.error(f"Error fetching latex paper: {e}")
+            import traceback
+
+            logger.error(f"Error fetching latex paper: {e}\n {traceback.format_exc()}")
             return None
 
     def fetch_paper(self, paper_id: str, title: str) -> Paper:

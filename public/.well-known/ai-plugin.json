@@ -9,9 +9,9 @@
     },
     "api": {
         "type": "openapi",
-        "url": "http://localhost:3333/openapi.yaml"
+        "url": "http://localhost:5000/openapi.yaml"
     },
-    "logo_url": "http://localhost:3333/logo.png",
+    "logo_url": "http://localhost:5000/logo.png",
     "contact_email": "legal@arxivxplorer.com",
     "legal_info_url": "http://arxivxplorer.com/legal"
 }
