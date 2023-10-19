@@ -13,7 +13,38 @@ from pylatexenc.latexwalker import LatexMacroNode
 from xplorer.paper import Paper, Section
 
 disableLogging()
-logger = logging.getLogger("latex_paper")
+logger = logging.getLogger(__name__)
+
+
+def local_kpsewhich(self, name):
+    "Locate the given file in the source directory and TEXINPUTS paths."
+    try:
+        srcDir = os.path.dirname(self.filename)
+    except AttributeError:
+        srcDir = '.'
+
+    texinputs = os.environ.get("TEXINPUTS", '.').split(os.path.pathsep)
+    search_paths = [srcDir] + texinputs
+
+    # Search for the file in the source directory and TEXINPUTS
+    for path in search_paths:
+        if not path:
+            continue
+
+        # Check with suffix
+        candidate_path = os.path.join(path, name)
+        if os.path.exists(candidate_path):
+            return os.path.abspath(candidate_path)
+
+        # Check without suffix by matching any file that starts with the name
+        for candidate in os.listdir(path):
+            if candidate.startswith(name + "."):
+                return os.path.abspath(os.path.join(path, candidate))
+
+    raise FileNotFoundError(f"Could not find any file named: {name}")
+
+# Monkey patch the method onto the Tex class
+TeX.TeX.kpsewhich = local_kpsewhich
 
 
 def handle_cite(node: LatexMacroNode, l2tobj: LatexNodes2Text):
