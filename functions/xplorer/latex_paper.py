@@ -97,7 +97,7 @@ class LatexPaper(Paper):
         ownerDocument = TeXDocument(config=config)
         tex = TeX.TeX(file=filename, ownerDocument=ownerDocument)
         self.tex_doc = tex.parse()
-        self._title = self.get_title(self.tex_doc)
+        self.title = self.title or self.get_title(self.tex_doc)
         tree = self.build_tree()
         return tree
 
@@ -106,9 +106,6 @@ class LatexPaper(Paper):
             bibitem.id: bibitem.textContent.strip()
             for bibitem in self.tex_doc.getElementsByTagName("bibitem")
         }
-
-    def build_title(self):
-        return self._title
 
     def get_title(self, tex_doc):
         title = tex_doc.userdata.get("title", None)

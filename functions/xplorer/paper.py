@@ -88,13 +88,13 @@ class Paper(ABC):
     tree: Section
     bibliography: Dict[str, str]
     abstract: str
-    original_title: Optional[str] = None
+    title: str
     methods: Dict[str, bool]
     store: VectorStore = None
 
     def __init__(self, filename, title=None, abstract=None):
+        self.title = title
         self.tree = self.build(filename)
-        self.original_title = title or self.build_title()
         self.methods = {"read_content": True, "table_of_contents": bool(self.sections)}
 
         self.bibliography = self.build_bibliography()
@@ -102,14 +102,11 @@ class Paper(ABC):
 
         self.abstract = abstract
         self.methods["read_abstract"] = bool(self.abstract)
+        self.title = self.title or "Unknown Title."
 
     @abstractmethod
     def build(self, filename) -> Section:
         "Build and return the paper tree and available methods"
-        raise NotImplementedError
-
-    @abstractmethod
-    def build_title(self) -> Optional[str]:
         raise NotImplementedError
 
     @abstractmethod
@@ -156,10 +153,6 @@ class Paper(ABC):
                 section = sections[i]
                 sections = section.subsections
             return section
-
-    @property
-    def title(self):
-        return self.original_title if self.original_title else "Unknown Title."
 
     @property
     def content(self):
@@ -233,9 +226,6 @@ class Paper(ABC):
                 return Section.from_dict(data["tree"])
 
             def build_bibliography(self) -> Dict[str, str]:
-                return data["bibliography"]
-
-            def build_title(self) -> str | None:
-                return data["original_title"]
+                return json.loads(data["bibliography"])
 
         return JSONPaper()

@@ -21,7 +21,7 @@ class PDFPaper(Paper):
             content = extract_text(f)
             parser = PDFParser(f)
             doc = PDFDocument(parser)
-            self._title = self.get_title(doc)
+            self.title = self.title or self.get_title(doc)
             tree = Section(self.title, content, [])
 
             if doc.is_extractable:
@@ -30,12 +30,7 @@ class PDFPaper(Paper):
                         (level, self._clean_title(title))
                         for level, title, *_ in doc.get_outlines()
                     ]
-                    body_text = (
-                        self._fetch_content(content, self.title)
-                        if self._title
-                        else content
-                    )
-                    tree.subsections = self.unflatten_sections(body_text, outline)
+                    tree.subsections = self.unflatten_sections(content, outline)
                 except Exception as e:
                     logger.error("Error parsing PDF: " + str(e))
             else:
@@ -45,9 +40,6 @@ class PDFPaper(Paper):
 
     def build_bibliography(self):
         return {}
-
-    def build_title(self) -> str | None:
-        return self._title
 
     def _clean_title(self, title):
         return re.sub(r"^\s*(?:\d+(\.\d*)*\.?|[a-zA-Z\d\.]+\s+)\s*", "", title).strip()
