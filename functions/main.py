@@ -11,13 +11,14 @@ initialize_app()
 api = ArxivXplorerAPI()
 
 
-def request_handler(fn=None, allow_cors=True):
+def request_handler(fn=None, allow_cors=True, secrets=None):
     if fn is None:
-        return functools.partial(request_handler, allow_cors=allow_cors)
+        return functools.partial(request_handler, allow_cors=allow_cors, secrets=secrets)
 
     @https_fn.on_request(
+        secrets=secrets,
         cors=options.CorsOptions(cors_origins=[r"*"], cors_methods=["get", "post"]),
-        memory=options.MemoryOption.GB_2,
+        memory=options.MemoryOption.GB_1,
         region=options.SupportedRegion.US_WEST1,
         max_instances=10,
         cpu=1,
@@ -37,7 +38,7 @@ def request_handler(fn=None, allow_cors=True):
     return thunk
 
 
-@request_handler
+@request_handler(secrets=["OPENAI_API_KEY"])
 def chunk_search(paper_id: str, query: str, count: int = 3, page: int = 1):
     return api.chunk_search(paper_id, query, count, page)
 
