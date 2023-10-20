@@ -8,6 +8,7 @@
         "venv",
         ".git",
         "*.log",
+        "__pycache__",
         "test"
       ]
     }

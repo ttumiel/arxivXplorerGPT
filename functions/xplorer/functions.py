@@ -263,26 +263,3 @@ class ArxivXplorerAPI:
             return id_match.group(1)
 
         return None
-
-
-# api = ArxivXplorerAPI()
-# server = FunctionServer(
-#     {
-#         "search": api.search,
-#         "read_paper_metadata": api.read_paper_metadata,
-#         "read_full_paper": api.read_full_paper,
-#         "read_section": api.read_section,
-#         "read_citation": api.read_citation,
-#         "chunk_search": api.chunk_search,
-#     }
-# )
-# server.run(debug=True)
-
-# import json
-# server.app.config["TESTING"] = True
-# client = server.app.test_client()
-
-# paper_id = "1706.03762v2"
-
-# rv = client.post("/read_section", json={"paper_id": paper_id, "section_id": [6,2]})
-# print(json.loads(rv.data))

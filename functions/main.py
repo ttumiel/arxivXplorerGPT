@@ -69,8 +69,8 @@ def search(
 
 
 @scheduler_fn.on_schedule(
-    schedule="every week 05:00",
-    timezone="UTC",
+    schedule="0 5 * * 0",
+    timezone=scheduler_fn.Timezone("Etc/UTC"),
     region=options.SupportedRegion.US_WEST1,
     memory=options.MemoryOption.MB_256,
     max_instances=1,
