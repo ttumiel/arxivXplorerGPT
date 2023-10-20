@@ -41,11 +41,19 @@ class VectorStore:
 
         return X_k, VT_k.T
 
-    @retry(wait=wait_random_exponential(min=2, max=10), stop=stop_after_attempt(3))
+    @retry(
+        wait=wait_random_exponential(min=2, max=10),
+        stop=stop_after_attempt(2),
+        reraise=True,
+    )
     def _embed_query(self, queries: List[str]) -> np.ndarray:
-        data = openai.Embedding.create(input=queries, engine="text-embedding-ada-002")[
-            "data"
-        ]
+        try:
+            data = openai.Embedding.create(
+                input=queries, engine="text-embedding-ada-002"
+            )["data"]
+        except Exception as e:
+            raise ValueError(f"OpenAI embedding failed with {e}")
+
         return np.array(
             [v["embedding"] for v in sorted(data, key=lambda x: x["index"])],
             dtype=np.float32,

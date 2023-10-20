@@ -1,5 +1,3 @@
-# from firebase_admin import firestore
-# from google.cloud import firestore as g_firestore
 import logging
 import os
 import re
@@ -9,10 +7,12 @@ import tempfile
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, fields
 from datetime import datetime
-from typing import Dict, List, Optional, TypedDict
+from typing import Dict, List, Optional, TypedDict, Union
 
 import arxiv
 import requests
+from firebase_admin import firestore
+from google.cloud import firestore as g_firestore
 from google.cloud import storage
 from xplorer.latex_paper import LatexPaper, Paper, guess_main_tex_file
 from xplorer.pdf_paper import PDFPaper
@@ -70,12 +70,22 @@ class PaperData:
 
 
 class PaperCache:
-    def __init__(self):
-        self.db: DBCache = LocalPaperCache(limit=2)
+    def __init__(self, firestore_collection: Optional[str] = None):
+        self.local_db: DBCache = LocalPaperCache(limit=2)
+        if firestore_collection:
+            self.remote_db: DBCache = FirestorePaperCache(firestore_collection, limit=2)
+        else:
+            self.remote_db = None
 
     def __getitem__(self, paper_id: str) -> PaperData:
         """Read a paper from the cache if it exists, otherwise download and parse it."""
-        paper_data = self.db[paper_id]
+        paper_data = self.local_db[paper_id]
+
+        if self.remote_db is not None and paper_data is None:
+            paper_data = self.remote_db[paper_id]
+            if paper_data is not None:
+                self.local_db[paper_id] = paper_data
+
         if paper_data is None:
             paper_data = self.get_paper_details(paper_id)
             paper = self.fetch_paper(paper_id, paper_data.title)
@@ -88,7 +98,8 @@ class PaperCache:
         return paper_data
 
     def __setitem__(self, paper_id: str, paper: PaperData):
-        self.db[paper_id] = paper
+        self.local_db[paper_id] = paper
+        self.remote_db[paper_id] = paper
 
     def get_paper_details(self, paper_id: str) -> PaperData:
         """
@@ -207,14 +218,13 @@ class DBCache(ABC):
 
 
 class LocalPaperCache(DBCache):
-    # TODO: since subsequent queries are likely to be related, I could keep a
-    # local cache of a smaller number of entries for the "currently online users"
     def __init__(self, limit: int = 2):
         super().__init__(limit)
-        self.db: Dict[str, PaperData] = {}
+        self.db: Dict[str, Dict[str, Union[PaperDataDict, datetime]]] = {}
 
     def __setitem__(self, paper_id: str, paper: PaperData):
         self.db[paper_id] = {"paper": paper.dump(), "timestamp": datetime.now()}
+        self.lru_delete()
 
     def __getitem__(self, paper_id: str) -> Optional[PaperData]:
         if paper_id in self.db:
@@ -230,35 +240,41 @@ class LocalPaperCache(DBCache):
 
         if num_to_delete > 0:
             keys = sorted(self.db, key=lambda k: self.db[k]["timestamp"])[
-                -num_to_delete:
+                :num_to_delete
             ]
             for key in keys:
                 del self.db[key]
 
 
 class FirestorePaperCache(DBCache):
-    def __init__(self, collection_name: str = "papers", limit: int = 50000):
+    def __init__(self, collection_name: str = "papers", limit: int = 10000):
         super().__init__(limit)
-        self.db = firestore.client()
+        self.db: g_firestore.Client = firestore.client()
         self.collection_name = collection_name
 
     def __setitem__(self, paper_id: str, paper: PaperData):
-        doc_ref = self.db.collection(self.collection_name).document(paper_id)
-        doc_ref.set({"paper": paper.dump(), "timestamp": g_firestore.SERVER_TIMESTAMP})
+        with self.db.transaction():
+            doc_ref = self.db.collection(self.collection_name).document(paper_id)
+            doc_ref.set(
+                {"paper": paper.dump(), "timestamp": g_firestore.SERVER_TIMESTAMP}
+            )
 
     def __getitem__(self, paper_id: str) -> Optional[PaperData]:
         doc_ref = self.db.collection(self.collection_name).document(paper_id)
         doc = doc_ref.get()
         if doc.exists:
-            # Update the timestamp to the current server time
-            doc_ref.update({"timestamp": g_firestore.SERVER_TIMESTAMP})
-            return PaperData.load(doc.to_dict()["paper"])
-        else:
-            return None
+            # TODO: Should I update the timestamp on every get
+            # doc_ref.update({"timestamp": g_firestore.SERVER_TIMESTAMP})
+            data = doc.to_dict()
+            if "paper" in data:
+                return PaperData.load(data["paper"])
 
-    def lru_delete(self):
+        return None
+
+    def lru_delete(self) -> int:
         # Get the count of documents in the collection
-        docs_count = len(list(self.db.collection(self.collection_name).stream()))
+        results = self.db.collection(self.collection_name).count(alias="all").get()
+        docs_count = results[0][0].value if results else 0
 
         # Calculate the number of documents to delete
         num_to_delete = max(0, docs_count - self.limit)
@@ -270,7 +286,8 @@ class FirestorePaperCache(DBCache):
                 .order_by("timestamp")
                 .limit(num_to_delete)
             )
-            docs = query.stream()
 
-            for doc in docs:
+            for doc in query.stream():
                 doc.reference.delete()
+
+        return num_to_delete

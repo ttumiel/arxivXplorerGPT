@@ -27,7 +27,9 @@ def error_logger(func):
         try:
             return func(*args, **kwargs)
         except Exception as e:
-            logger.error(f"Error in {func.__name__}:\n{traceback.format_exc()}")
+            logger.error(
+                f"ERROR :: {func.__name__}(args={args}, kwargs={kwargs}):\n{traceback.format_exc()}"
+            )
             return {"Error": str(e)}
 
     return inner
@@ -44,7 +46,7 @@ class ArxivXplorerAPI:
     }
 
     def __init__(self):
-        self.cache = PaperCache()
+        self.cache = PaperCache("papers")
 
     def __getitem__(self, paper_id: str) -> PaperData:
         paper_id = self.clean_arxiv_id(paper_id)
