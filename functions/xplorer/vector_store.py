@@ -1,4 +1,6 @@
-from typing import List, Optional
+import base64
+import json
+from typing import List, Optional, Tuple
 
 import numpy as np
 import openai
@@ -12,10 +14,11 @@ class VectorStore:
 
     def embed(self, chunks: List[str], compress_dim: Optional[int] = 384):
         self.chunks = chunks
+        self.compress_dim = compress_dim
         embeddings = self._embed_query(chunks)
 
-        if compress_dim:
-            embeddings, self.transform = self.compress(embeddings, compress_dim)
+        if self.compress_dim:
+            embeddings, self.transform = self.compress(embeddings, self.compress_dim)
 
         self.vectors = embeddings
 
@@ -30,14 +33,14 @@ class VectorStore:
         - np.ndarray: Compressed data with shape [N, compression_dim]
         - np.ndarray: Transform matrix with shape [K, compression_dim]
         """
-        compression_dim = min(compression_dim, *data.shape)
+        self.compress_dim = min(compression_dim, *data.shape)
 
         # Perform Singular Value Decomposition
         U, S, VT = np.linalg.svd(data, full_matrices=False)
 
         # Truncate to compression_dim dimensions
-        X_k = U[:, :compression_dim] * S[:compression_dim]
-        VT_k = VT[:compression_dim]
+        X_k = U[:, : self.compress_dim] * S[: self.compress_dim]
+        VT_k = VT[: self.compress_dim]
 
         return X_k, VT_k.T
 
@@ -74,18 +77,30 @@ class VectorStore:
 
         return [self.chunks[i] for i in top_indices]
 
+    def _to_base64(self, arr: np.ndarray):
+        if arr is None:
+            return
+        return base64.b64encode(arr.tobytes()).decode("ascii")
+
+    def _from_base64(self, b64: str, shape: Tuple[int, int]):
+        if b64 is None:
+            return
+        return np.frombuffer(base64.b64decode(b64), dtype=np.float32).reshape(shape)
+
     def dump(self):
-        transform = self.transform.tolist() if self.transform is not None else None
         return {
-            "vectors": self.vectors.tolist(),
-            "transform": transform,
-            "chunks": self.chunks,
+            "vectors": self._to_base64(self.vectors),
+            "transform": self._to_base64(self.transform),
+            "chunks": json.dumps(self.chunks),
+            "dim": self.compress_dim,
         }
 
     @classmethod
     def load(cls, data):
         store = cls()
-        store.vectors = data["vectors"]
-        store.transform = data["transform"]
-        store.chunks = data["chunks"]
+        dim = data["dim"]
+        store.compress_dim = dim
+        store.chunks = json.loads(data["chunks"])
+        store.vectors = store._from_base64(data["vectors"], (len(store.chunks), dim))
+        store.transform = store._from_base64(data["transform"], (1536, dim))
         return store

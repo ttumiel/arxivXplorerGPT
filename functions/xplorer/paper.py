@@ -202,28 +202,24 @@ class Paper(ABC):
         return self.title + "\n" + self.table_of_contents
 
     def dumps(self) -> str:
-        return json.dumps(
-            {
-                "tree": asdict(self.tree),
-                "bibliography": self.bibliography,
-                "abstract": self.abstract,
-                "original_title": self.original_title,
-                "store": self.store.dump() if self.store else None,
-            }
-        )
+        return {
+            "tree": json.dumps(asdict(self.tree)),
+            "bibliography": json.dumps(self.bibliography),
+            "abstract": self.abstract,
+            "title": self.title,
+            "store": self.store.dump() if self.store else None,
+        }
 
     @classmethod
     def loads(cls, data):
-        data = json.loads(data)
-
         class JSONPaper(cls):
             def __init__(self):
-                super().__init__(None, data["original_title"], data["abstract"])
+                super().__init__(None, data["title"], data["abstract"])
                 if data["store"] is not None:
                     self.store = VectorStore.load(data["store"])
 
             def build(self, filename=None):
-                return Section.from_dict(data["tree"])
+                return Section.from_dict(json.loads(data["tree"]))
 
             def build_bibliography(self) -> Dict[str, str]:
                 return json.loads(data["bibliography"])
