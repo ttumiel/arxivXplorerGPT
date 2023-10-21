@@ -59,7 +59,7 @@ paths:
       responses:
         '200':
           description: OK
-      summary: Lookup a particular citation id of a paper, if paper_metadata.has_bibliography == True.
+      summary: Lookup a particular citation id of a paper, if paper_metadata.can_read_citation == True.
   /read_paper_metadata:
     post:
       operationId: read_paper_metadata
@@ -83,7 +83,7 @@ paths:
         '200':
           description: OK
       summary: 'Read the metadata of a paper, where available. Including the paper''s
-        id, title, date, authors, abstract, table_of_contents, has_bibliography.'
+        id, title, date, authors, abstract, table_of_contents, can_read_citation.'
   /read_section:
     post:
       operationId: read_section

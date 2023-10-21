@@ -8,12 +8,14 @@ from firebase_functions import https_fn, options, scheduler_fn
 from xplorer.functions import ArxivXplorerAPI, SearchMethod
 
 initialize_app()
-api = ArxivXplorerAPI()
+api = ArxivXplorerAPI(firestore_db="papers")
 
 
 def request_handler(fn=None, allow_cors=True, secrets=None):
     if fn is None:
-        return functools.partial(request_handler, allow_cors=allow_cors, secrets=secrets)
+        return functools.partial(
+            request_handler, allow_cors=allow_cors, secrets=secrets
+        )
 
     @https_fn.on_request(
         secrets=secrets,
@@ -26,6 +28,7 @@ def request_handler(fn=None, allow_cors=True, secrets=None):
     @functools.wraps(fn)
     def thunk(request: https_fn.Request):
         try:
+            # TODO: Should I change post only to post or get?
             args = request.json if request.method == "POST" and request.is_json else {}
             result = function_call(
                 "fn", args, {"fn": fn}, validate=True, from_json=False
