@@ -7,7 +7,7 @@ import tempfile
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, fields
 from datetime import datetime
-from typing import Dict, List, Optional, TypedDict, Union
+from typing import Dict, Optional, TypedDict, Union
 
 import arxiv
 import requests
@@ -20,14 +20,22 @@ from xplorer.pdf_paper import PDFPaper
 logger = logging.getLogger(__name__)
 
 
-class PaperDataDict(TypedDict, total=False):
+class PaperSearchResult(TypedDict, total=False):
     id: str
     title: str
     date: str
-    authors: Optional[str]
-    abstract: Optional[str]
-    table_of_contents: Optional[str]
-    has_bibliography: Optional[bool]
+    first_author: str
+    abstract_snippet: str
+
+
+class PaperMetadata(TypedDict, total=False):
+    id: str
+    title: str
+    date: str
+    authors: str
+    abstract: str
+    table_of_contents: str
+    can_read_citation: bool
 
 
 @dataclass
@@ -35,15 +43,15 @@ class PaperData:
     id: str
     title: str
     date: str
-    authors: Optional[List[str]] = None
-    abstract: Optional[str] = None
+    authors: str
+    abstract: str
     table_of_contents: Optional[str] = None
-    has_bibliography: Optional[bool] = False
+    can_read_citation: Optional[bool] = False
     paper: Optional[Paper] = None
 
-    def to_dict(self, show_abstract=True) -> PaperDataDict:
+    def to_dict(self, show_abstract=True) -> PaperMetadata:
         return {
-            f.name: ", ".join(attr) if isinstance(attr, list) else attr
+            f.name: attr
             for f in fields(self)
             if (attr := getattr(self, f.name))
             and (show_abstract or f.name != "abstract")
@@ -58,7 +66,7 @@ class PaperData:
             "authors": self.authors,
             "abstract": self.abstract,
             "table_of_contents": self.table_of_contents,
-            "has_bibliography": self.has_bibliography,
+            "can_read_citation": self.can_read_citation,
             "paper": self.paper.dumps(),
         }
 
@@ -90,7 +98,7 @@ class PaperCache:
             paper_data = self.get_paper_details(paper_id)
             paper = self.fetch_paper(paper_id, paper_data.title)
             paper_data.paper = paper
-            paper_data.has_bibliography = paper.has_bibliography
+            paper_data.can_read_citation = paper.can_read_citation
             paper_data.table_of_contents = paper.table_of_contents
 
             self[paper_id] = paper_data
@@ -116,7 +124,7 @@ class PaperCache:
             paper_id,
             paper.title,
             paper.published.strftime("%Y-%m-%d"),
-            [str(a) for a in paper.authors],
+            ", ".join(str(a) for a in paper.authors),
             paper.summary,
         )
 
@@ -195,7 +203,7 @@ class PaperCache:
             if paper is None:
                 paper = self.fetch_pdf_paper(paper_id, tmpdirname, title)
 
-        assert paper, "Couldn't fetch paper."
+        assert paper is not None, "Couldn't fetch paper."
         return paper
 
 
@@ -220,7 +228,7 @@ class DBCache(ABC):
 class LocalPaperCache(DBCache):
     def __init__(self, limit: int = 2):
         super().__init__(limit)
-        self.db: Dict[str, Dict[str, Union[PaperDataDict, datetime]]] = {}
+        self.db: Dict[str, Dict[str, Union[PaperMetadata, datetime]]] = {}
 
     def __setitem__(self, paper_id: str, paper: PaperData):
         self.db[paper_id] = {"paper": paper.dump(), "timestamp": datetime.now()}

@@ -87,21 +87,17 @@ class Section:
 class Paper(ABC):
     tree: Section
     bibliography: Dict[str, str]
-    abstract: str
     title: str
     methods: Dict[str, bool]
     store: VectorStore = None
 
-    def __init__(self, filename, title=None, abstract=None):
+    def __init__(self, filename, title=None):
         self.title = title
         self.tree = self.build(filename)
         self.methods = {"read_content": True, "table_of_contents": bool(self.sections)}
 
         self.bibliography = self.build_bibliography()
         self.methods["get_citation"] = bool(self.bibliography)
-
-        self.abstract = abstract
-        self.methods["read_abstract"] = bool(self.abstract)
         self.title = self.title or "Unknown Title."
 
     @abstractmethod
@@ -167,7 +163,7 @@ class Paper(ABC):
         return "\n".join(self.section_contents(self.tree.subsections))
 
     @property
-    def has_bibliography(self):
+    def can_read_citation(self):
         return self.methods["get_citation"]
 
     def section_contents(self, sections: Section, level: int = 0):
@@ -205,7 +201,6 @@ class Paper(ABC):
         return {
             "tree": json.dumps(asdict(self.tree)),
             "bibliography": json.dumps(self.bibliography),
-            "abstract": self.abstract,
             "title": self.title,
             "store": self.store.dump() if self.store else None,
         }
@@ -214,7 +209,7 @@ class Paper(ABC):
     def loads(cls, data):
         class JSONPaper(cls):
             def __init__(self):
-                super().__init__(None, data["title"], data["abstract"])
+                super().__init__(None, data["title"])
                 if data["store"] is not None:
                     self.store = VectorStore.load(data["store"])
 

@@ -10,7 +10,7 @@ import arxiv
 import requests
 from chat2func import json_schema
 from chat2func.server import FunctionServer
-from xplorer.db import PaperCache, PaperData, PaperDataDict
+from xplorer.db import PaperCache, PaperData, PaperMetadata, PaperSearchResult
 
 logger = logging.getLogger(__name__)
 
@@ -45,8 +45,8 @@ class ArxivXplorerAPI:
         SearchMethod.SEMANTIC: "https://us-west1-semanticxplorer.cloudfunctions.net/semantic-xplorer-db",
     }
 
-    def __init__(self):
-        self.cache = PaperCache("papers")
+    def __init__(self, firestore_db: Optional[str] = None):
+        self.cache = PaperCache(firestore_db)
 
     def __getitem__(self, paper_id: str) -> PaperData:
         paper_id = self.clean_arxiv_id(paper_id)
@@ -74,11 +74,11 @@ class ArxivXplorerAPI:
     def search(
         self,
         query: str,
-        count: int = 5,
+        count: int = 8,
         page: int = 1,
         year: int = None,
         method: SearchMethod = SearchMethod.SEMANTIC,
-    ) -> List[PaperDataDict]:
+    ) -> List[PaperSearchResult]:
         """Searches for arxiv articles using the user's query.
 
         Semantic search is preferred unless you want an exact keyword, or you want an exact paper.
@@ -86,7 +86,7 @@ class ArxivXplorerAPI:
 
         Args:
             query (str): The user's query.
-            count (int): The number of results to return. Defaults to 5.
+            count (int): The number of results to return. Defaults to 8.
             page (int): Pagination index. Defaults to 1.
             year (int): The year to filter results by. Defaults to None, for any year.
             method (SearchMethod): The search method to use. Defaults to semantic search.
@@ -120,23 +120,17 @@ class ArxivXplorerAPI:
 
     @json_schema(full_docstring=True)
     @error_logger
-    def read_paper_metadata(self, paper_id: str, show_abstract=False) -> PaperDataDict:
+    def read_paper_metadata(
+        self, paper_id: str, show_abstract: bool = True
+    ) -> PaperMetadata:
         """Read the metadata of a paper, where available. Including the paper's id,
-        title, date, authors, abstract, table_of_contents, has_bibliography.
+        title, date, authors, abstract, table_of_contents, can_read_citation.
 
         Args:
             paper_id (str): arxiv ID.
-            show_abstract (bool): Include the abstract in the response. Defaults to False.
+            show_abstract (bool): Include the abstract in the response. Defaults to True.
 
-        Returns: PaperData(
-            id: str,
-            title: str,
-            date: str,
-            authors: Optional[str] = None,
-            abstract: Optional[str] = None,
-            table_of_contents: Optional[str] = None,
-            has_bibliography: Optional[bool] = False,
-        )
+        Returns: PaperMetadata
         """
         return self[paper_id].to_dict(show_abstract=show_abstract)
 
@@ -176,7 +170,7 @@ class ArxivXplorerAPI:
     @json_schema
     @error_logger
     def read_citation(self, paper_id: str, citation: str) -> str:
-        """Lookup a particular citation id of a paper, if paper_metadata.has_bibliography == True.
+        """Lookup a particular citation id of a paper, if paper_metadata.can_read_citation == True.
 
         Args:
             paper_id (str): arxiv ID.
@@ -184,7 +178,7 @@ class ArxivXplorerAPI:
         """
         # TODO: some of the citations look mangled: <cit. J>onasFaceNet2017
         paper = self[paper_id].paper
-        assert paper.has_bibliography, "Paper does not support getting citations."
+        assert paper.can_read_citation, "Paper does not support getting citations."
         return paper.get_citation(citation)
 
     def parse_query_string(
@@ -199,16 +193,33 @@ class ArxivXplorerAPI:
 
         return "?" + urlencode(q)
 
+    def _truncate_abstract(self, abstract: str, char_limit: int = 350) -> str:
+        """Truncates an abstract to the nearest space before char_limit.
+
+        Args:
+            abstract (str): The abstract to truncate.
+            char_limit (int): max number of characters in the truncated abstract.
+        """
+        if len(abstract) < char_limit:
+            return abstract
+
+        truncated_abstract = abstract[:char_limit]
+        last_space = truncated_abstract.rfind(" ")
+        if last_space != -1:
+            truncated_abstract = truncated_abstract[:last_space]
+
+        return truncated_abstract + "..."
+
     def _filter_papers(self, papers: List[Dict], skip_first=False) -> List[PaperData]:
         "Filter raw json arxiv xplorer response into PaperData"
         filtered_papers = [
-            PaperData(
-                paper["id"],
-                paper["metadata"]["title"],
-                paper["metadata"]["date"],
-                paper["metadata"]["short_author"],
-                paper["metadata"]["abstract"],
-            ).to_dict()
+            PaperSearchResult(
+                id=paper["id"],
+                title=paper["metadata"]["title"],
+                date=paper["metadata"]["date"],
+                first_author=paper["metadata"]["short_author"],
+                abstract_snippet=self._truncate_abstract(paper["metadata"]["abstract"]),
+            )
             for paper in papers
         ]
         if skip_first:
@@ -217,7 +228,7 @@ class ArxivXplorerAPI:
 
     def _xplorer_search(
         self, query: str, count: int, page: int = 1, year: int = None
-    ) -> List[PaperData]:
+    ) -> List[PaperSearchResult]:
         "Searches arxiv xplorer for papers."
         sim_paper_id = self.clean_arxiv_id(query)
         is_sim = bool(sim_paper_id)
@@ -234,7 +245,9 @@ class ArxivXplorerAPI:
             resp.raise_for_status()
         return self._filter_papers(resp.json(), skip_first=is_sim)
 
-    def _arxiv_search(self, query: str, count: int, page: int = 1) -> List[PaperData]:
+    def _arxiv_search(
+        self, query: str, count: int, page: int = 1
+    ) -> List[PaperSearchResult]:
         "Search arxiv using arxiv's keyword search."
         # TODO: fix page
         """Searches for arxiv articles that contain the user's keyword query."""
@@ -242,13 +255,13 @@ class ArxivXplorerAPI:
             query=query, max_results=count, sort_by=arxiv.SortCriterion.Relevance
         )
         return [
-            PaperData(
-                self.clean_arxiv_id(r.get_short_id()),
-                r.title,
-                r.published.strftime("%Y-%m-%d"),
-                f"{r.authors[0]}{', et al.' if len(r.authors) > 1 else ''}",
-                r.summary,
-            ).to_dict()
+            PaperSearchResult(
+                id=self.clean_arxiv_id(r.get_short_id()),
+                title=r.title,
+                date=r.published.strftime("%Y-%m-%d"),
+                first_author=f"{r.authors[0]}{', et al.' if len(r.authors) > 1 else ''}",
+                abstract_snippet=self._truncate_abstract(r.summary),
+            )
             for r in search.results()
         ]
 

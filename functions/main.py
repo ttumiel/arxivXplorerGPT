@@ -44,7 +44,7 @@ def chunk_search(paper_id: str, query: str, count: int = 3, page: int = 1):
 
 
 @request_handler
-def read_paper_metadata(paper_id: str, show_abstract=False):
+def read_paper_metadata(paper_id: str, show_abstract=True):
     return api.read_paper_metadata(paper_id, show_abstract)
 
 
@@ -61,7 +61,7 @@ def read_citation(paper_id: str, citation: str):
 @request_handler
 def search(
     query: str,
-    count: int = 5,
+    count: int = 8,
     page: int = 1,
     year: int = None,
     method: SearchMethod = SearchMethod.SEMANTIC,
