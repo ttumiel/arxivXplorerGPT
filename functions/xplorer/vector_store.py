@@ -1,5 +1,6 @@
 import base64
 import json
+import zlib
 from typing import List, Optional, Tuple
 
 import numpy as np
@@ -12,7 +13,7 @@ class VectorStore:
     chunks: List[str] = None
     transform: Optional[np.ndarray] = None
 
-    def embed(self, chunks: List[str], compress_dim: Optional[int] = 384):
+    def embed(self, chunks: List[str], compress_dim: Optional[int] = 128):
         self.chunks = chunks
         self.compress_dim = compress_dim
         embeddings = self._embed_query(chunks)
@@ -77,15 +78,24 @@ class VectorStore:
 
         return [self.chunks[i] for i in top_indices]
 
-    def _to_base64(self, arr: np.ndarray):
+    def _to_base64(self, arr: np.ndarray, dtype=np.int16):
         if arr is None:
             return
-        return base64.b64encode(arr.tobytes()).decode("ascii")
+        max_val = np.iinfo(dtype).max - 1
+        arr_max = np.max(np.abs(arr)) or 1
+        precision = int(max_val / arr_max)
+        arr = np.round(arr * precision).astype(dtype)
+        data = zlib.compress(arr.tobytes())
+        data = base64.b64encode(data).decode("ascii")
+        return f"{precision};{data}"
 
-    def _from_base64(self, b64: str, shape: Tuple[int, int]):
+    def _from_base64(self, b64: str, shape: Tuple[int, int], dtype=np.int16):
         if b64 is None:
             return
-        return np.frombuffer(base64.b64decode(b64), dtype=np.float32).reshape(shape)
+        precision, data = data.split(";", 1)
+        data = zlib.decompress(base64.b64decode(data))
+        arr = np.frombuffer(data, dtype=dtype).reshape(shape)
+        return arr.astype(np.float32) / float(precision)
 
     def dump(self):
         return {
