@@ -197,20 +197,23 @@ class Paper(ABC):
     def __repr__(self):
         return self.title + "\n" + self.table_of_contents
 
-    def dumps(self) -> str:
-        return {
+    def dumps(self, vectors: bool = True) -> dict:
+        data = {
             "tree": json.dumps(asdict(self.tree)),
             "bibliography": json.dumps(self.bibliography),
             "title": self.title,
-            "store": self.store.dump() if self.store else None,
         }
+        if vectors:
+            data["store"] = (self.store.dump() if self.store else None,)
+
+        return data
 
     @classmethod
-    def loads(cls, data):
+    def loads(cls, data: dict):
         class JSONPaper(cls):
             def __init__(self):
                 super().__init__(None, data["title"])
-                if data["store"] is not None:
+                if "store" in data and data["store"] is not None:
                     self.store = VectorStore.load(data["store"])
 
             def build(self, filename=None):

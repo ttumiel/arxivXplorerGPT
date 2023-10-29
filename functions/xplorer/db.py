@@ -1,5 +1,6 @@
 import logging
 import os
+import random
 import re
 import shutil
 import tarfile
@@ -7,15 +8,16 @@ import tempfile
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, fields
 from datetime import datetime
-from typing import Dict, Optional, TypedDict, Union
+from typing import Dict, List, Optional, TypedDict, Union
 
 import arxiv
 import requests
-from firebase_admin import firestore
+from firebase_admin import db, firestore
 from google.cloud import firestore as g_firestore
 from google.cloud import storage
 from xplorer.latex_paper import LatexPaper, Paper, guess_main_tex_file
 from xplorer.pdf_paper import PDFPaper
+from xplorer.vector_store import VectorStore
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +69,7 @@ class PaperData:
             "abstract": self.abstract,
             "table_of_contents": self.table_of_contents,
             "can_read_citation": self.can_read_citation,
-            "paper": self.paper.dumps(),
+            "paper": self.paper.dumps(vectors=False),
         }
 
     @classmethod
@@ -79,18 +81,19 @@ class PaperData:
 
 class PaperCache:
     def __init__(self, firestore_collection: Optional[str] = None):
-        self.local_db: DBCache = LocalPaperCache(limit=2)
+        self.local_db = LocalPaperCache(limit=15)
         if firestore_collection:
-            self.remote_db: DBCache = FirestorePaperCache(firestore_collection, limit=2)
+            self.firestore_db = FirestorePaperCache(firestore_collection, limit=5000)
+            self.realtime_db = RealtimeDBPaperCache(limit=5000)
         else:
-            self.remote_db = None
+            self.firestore_db = self.realtime_db = None
 
     def __getitem__(self, paper_id: str) -> PaperData:
         """Read a paper from the cache if it exists, otherwise download and parse it."""
         paper_data = self.local_db[paper_id]
 
-        if self.remote_db is not None and paper_data is None:
-            paper_data = self.remote_db[paper_id]
+        if self.firestore_db is not None and paper_data is None:
+            paper_data = self.firestore_db[paper_id]
             if paper_data is not None:
                 self.local_db[paper_id] = paper_data
 
@@ -105,9 +108,27 @@ class PaperCache:
 
         return paper_data
 
+    def get_vector_store(self, paper_id: str) -> VectorStore:
+        if paper_id in self.local_db.chunk_db:
+            return self.local_db.chunk_db[paper_id]
+
+        store = self.realtime_db[paper_id]
+        if store is not None:
+            self.local_db.chunk_db[paper_id] = store
+            return store
+
+        paper_data = self[paper_id]
+        store = VectorStore()
+        store.embed(paper_data.paper.chunk_tree())
+        self.local_db.chunk_db[paper_id] = store
+        self.realtime_db[paper_id] = store
+        return store
+
     def __setitem__(self, paper_id: str, paper: PaperData):
         self.local_db[paper_id] = paper
-        self.remote_db[paper_id] = paper
+        self.firestore_db[paper_id] = paper
+        if paper.paper.store is not None:
+            self.realtime_db[paper_id] = paper.paper.store
 
     def get_paper_details(self, paper_id: str) -> PaperData:
         """
@@ -206,6 +227,12 @@ class PaperCache:
         assert paper is not None, "Couldn't fetch paper."
         return paper
 
+    def lru_delete_remote(self) -> int:
+        deleted_ids = self.firestore_db.lru_delete()
+        for paper_id in deleted_ids:
+            self.realtime_db.delete(paper_id)
+        return len(deleted_ids)
+
 
 class DBCache(ABC):
     def __init__(self, limit: int):
@@ -229,9 +256,12 @@ class LocalPaperCache(DBCache):
     def __init__(self, limit: int = 2):
         super().__init__(limit)
         self.db: Dict[str, Dict[str, Union[PaperMetadata, datetime]]] = {}
+        self.chunk_db: Dict[str, VectorStore] = {}
 
     def __setitem__(self, paper_id: str, paper: PaperData):
         self.db[paper_id] = {"paper": paper.dump(), "timestamp": datetime.now()}
+        if paper.paper.store is not None:
+            self.chunk_db[paper_id] = paper.paper.store
         self.lru_delete()
 
     def __getitem__(self, paper_id: str) -> Optional[PaperData]:
@@ -252,6 +282,8 @@ class LocalPaperCache(DBCache):
             ]
             for key in keys:
                 del self.db[key]
+                if key in self.chunk_db:
+                    del self.chunk_db[key]
 
 
 class FirestorePaperCache(DBCache):
@@ -271,21 +303,24 @@ class FirestorePaperCache(DBCache):
         doc_ref = self.db.collection(self.collection_name).document(paper_id)
         doc = doc_ref.get()
         if doc.exists:
-            # TODO: Should I update the timestamp on every get
-            # doc_ref.update({"timestamp": g_firestore.SERVER_TIMESTAMP})
+            # TODO: Should I update the timestamp on every get?
+            if random.random() < 0.1:
+                doc_ref.update({"timestamp": g_firestore.SERVER_TIMESTAMP})
+
             data = doc.to_dict()
             if "paper" in data:
                 return PaperData.load(data["paper"])
 
         return None
 
-    def lru_delete(self) -> int:
+    def lru_delete(self) -> List[str]:
         # Get the count of documents in the collection
         results = self.db.collection(self.collection_name).count(alias="all").get()
         docs_count = results[0][0].value if results else 0
 
         # Calculate the number of documents to delete
         num_to_delete = max(0, docs_count - self.limit)
+        paper_ids = []
 
         if num_to_delete > 0:
             # Query for the oldest documents, limited to the number to delete
@@ -297,5 +332,31 @@ class FirestorePaperCache(DBCache):
 
             for doc in query.stream():
                 doc.reference.delete()
+                paper_ids.append(doc.id)
 
-        return num_to_delete
+        return paper_ids
+
+
+class RealtimeDBPaperCache(DBCache):
+    def __init__(self, ref_path: str = "vectors", limit: int = 1000):
+        "The realtime DB is just used to cache the vector stores due to larger value size limit."
+        super().__init__(limit)
+        self.ref = db.reference(ref_path)
+
+    def __setitem__(self, paper_id: str, vector_store: VectorStore):
+        self.ref.child(self._sanitize_path(paper_id)).set(vector_store.dump())
+
+    def __getitem__(self, paper_id: str) -> Optional[PaperData]:
+        record = self.ref.child(self._sanitize_path(paper_id)).get()
+        if record:
+            return VectorStore.load(record)
+        return None
+
+    def delete(self, paper_id: str):
+        self.ref.child(self._sanitize_path(paper_id)).delete()
+
+    def lru_delete(self) -> int:
+        raise NotImplementedError
+
+    def _sanitize_path(self, path: str) -> str:
+        return path.replace(".", "_").replace("/", "_")

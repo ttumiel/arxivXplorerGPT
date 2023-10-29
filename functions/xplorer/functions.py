@@ -109,13 +109,10 @@ class ArxivXplorerAPI:
             count (int): The number of results to return. Defaults to 3.
             page (int): Pagination index. Defaults to 1.
         """
-        paper_data = self[paper_id]
-        paper = paper_data.paper
-        should_update = paper.store is None
         # TODO: implement pagination
-        result = paper.chunk_search(query, count)
-        if should_update:
-            self[paper_id] = paper_data
+
+        store = self.cache.get_vector_store(paper_id)
+        result = store.search(query, count)
         return result
 
     @json_schema(full_docstring=True)

@@ -83,7 +83,7 @@ def search(
 def db_clean(event: scheduler_fn.ScheduledEvent):
     "Delete the least recently used papers from firestore"
     try:
-        num_deleted = api.cache.remote_db.lru_delete()
+        num_deleted = api.cache.lru_delete_remote()
     except Exception as e:
         print(f"ERROR :: Function db_clean failed:\n", traceback.format_exc())
         raise e

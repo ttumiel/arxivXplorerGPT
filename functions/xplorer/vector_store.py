@@ -89,8 +89,8 @@ class VectorStore:
         data = base64.b64encode(data).decode("ascii")
         return f"{precision};{data}"
 
-    def _from_base64(self, b64: str, shape: Tuple[int, int], dtype=np.int16):
-        if b64 is None:
+    def _from_base64(self, data: str, shape: Tuple[int, int], dtype=np.int16):
+        if data is None:
             return
         precision, data = data.split(";", 1)
         data = zlib.decompress(base64.b64decode(data))
@@ -101,14 +101,14 @@ class VectorStore:
         return {
             "vectors": self._to_base64(self.vectors),
             "transform": self._to_base64(self.transform),
+            "dim": str(self.compress_dim),
             "chunks": json.dumps(self.chunks),
-            "dim": self.compress_dim,
         }
 
     @classmethod
     def load(cls, data):
         store = cls()
-        dim = data["dim"]
+        dim = int(data["dim"])
         store.compress_dim = dim
         store.chunks = json.loads(data["chunks"])
         store.vectors = store._from_base64(data["vectors"], (len(store.chunks), dim))
