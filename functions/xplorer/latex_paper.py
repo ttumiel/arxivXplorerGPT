@@ -79,8 +79,8 @@ class LatexPaper(Paper):
             "custom",
             prepend=True,
             macros=[
-                MacroTextSpec("cite", simplify_repl=labeller("cite")),
-                MacroTextSpec("citep", simplify_repl=labeller("cite")),
+                MacroTextSpec("cite", simplify_repl=labeller("cit")),
+                MacroTextSpec("citep", simplify_repl=labeller("cit")),
                 MacroTextSpec("ref", simplify_repl=labeller("ref")),
                 MacroTextSpec("label", simplify_repl=labeller("label")),
                 MacroTextSpec("includegraphics", simplify_repl=labeller("image")),
