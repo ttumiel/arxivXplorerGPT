@@ -10,7 +10,6 @@
         "*.log",
         "__pycache__",
         "test",
-        "plugin-prompt.md",
         "export.py"
       ]
     }
@@ -42,7 +41,8 @@
     "ignore": [
       "firebase.json",
       "**/.*",
-      "test"
+      "test",
+      "plugin-prompt.md"
     ],
     "headers": [
       {
