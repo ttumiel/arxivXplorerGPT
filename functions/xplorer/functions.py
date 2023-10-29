@@ -61,7 +61,6 @@ class ArxivXplorerAPI:
             {
                 "search": self.search,
                 "read_paper_metadata": self.read_paper_metadata,
-                # "read_full_paper": self.read_full_paper,
                 "read_section": self.read_section,
                 "read_citation": self.read_citation,
                 "chunk_search": self.chunk_search,
@@ -76,7 +75,7 @@ class ArxivXplorerAPI:
         query: str,
         count: int = 8,
         page: int = 1,
-        year: int = None,
+        year: Optional[int] = None,
         method: SearchMethod = SearchMethod.SEMANTIC,
     ) -> List[PaperSearchResult]:
         """Searches for arxiv articles using the user's query.
@@ -86,10 +85,10 @@ class ArxivXplorerAPI:
 
         Args:
             query (str): The user's query.
-            count (int): The number of results to return. Defaults to 8.
-            page (int): Pagination index. Defaults to 1.
+            count (int): The number of results to return.
+            page (int): Pagination index.
             year (int): The year to filter results by. Defaults to None, for any year.
-            method (SearchMethod): The search method to use. Defaults to semantic search.
+            method (SearchMethod): The search method to use.
         """
         if method == SearchMethod.KEYWORD:
             return self._arxiv_search(query, count, page)
@@ -106,8 +105,11 @@ class ArxivXplorerAPI:
         Args:
             paper_id (str): arxiv ID.
             query (str): The user's query.
-            count (int): The number of results to return. Defaults to 3.
-            page (int): Pagination index. Defaults to 1.
+            count (int): The number of results to return.
+            page (int): Pagination index.
+
+        Returns:
+            A list of matching chunks in descending order of similarity.
         """
         # TODO: implement pagination
 
@@ -125,9 +127,7 @@ class ArxivXplorerAPI:
 
         Args:
             paper_id (str): arxiv ID.
-            show_abstract (bool): Include the abstract in the response. Defaults to True.
-
-        Returns: PaperMetadata
+            show_abstract (bool): Include the abstract in the response.
         """
         return self[paper_id].to_dict(show_abstract=show_abstract)
 
@@ -150,11 +150,8 @@ class ArxivXplorerAPI:
             paper_id (str): arxiv ID.
             section_id (Union[int, List[int]]): 1-indexed section ID, or list of subsection ids.
 
-        Returns: Section(
-            title: str,
-            content: str,
-            subsections: Optional[List["Section"]] = None,
-        )
+        Returns:
+            Section title and content
         """
         # Zero-indexed inside paper
         if isinstance(section_id, int):
@@ -172,8 +169,10 @@ class ArxivXplorerAPI:
         Args:
             paper_id (str): arxiv ID.
             citation (str): The citation ID to lookup. e.g. `demo` from the citation `<cit. demo>`
+
+        Returns:
+            The citation text.
         """
-        # TODO: some of the citations look mangled: <cit. J>onasFaceNet2017
         paper = self[paper_id].paper
         assert paper.can_read_citation, "Paper does not support getting citations."
         return paper.get_citation(citation)

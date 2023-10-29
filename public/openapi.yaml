@@ -14,10 +14,12 @@ paths:
             schema:
               properties:
                 count:
-                  description: The number of results to return. Defaults to 3.
+                  default: 3
+                  description: The number of results to return.
                   type: integer
                 page:
-                  description: Pagination index. Defaults to 1.
+                  default: 1
+                  description: Pagination index.
                   type: integer
                 paper_id:
                   description: arxiv ID.
@@ -32,7 +34,13 @@ paths:
         required: true
       responses:
         '200':
-          description: OK
+          content:
+            application/json:
+              schema:
+                items:
+                  type: string
+                type: array
+          description: A list of matching chunks in descending order of similarity.
       summary: Perform semantic search for a query across 250 word chunks of a paper's
         sections.
   /read_citation:
@@ -58,8 +66,13 @@ paths:
         required: true
       responses:
         '200':
-          description: OK
-      summary: Lookup a particular citation id of a paper, if paper_metadata.can_read_citation == True.
+          content:
+            application/json:
+              schema:
+                type: string
+          description: The citation text.
+      summary: Lookup a particular citation id of a paper, if paper_metadata.can_read_citation
+        == True.
   /read_paper_metadata:
     post:
       operationId: read_paper_metadata
@@ -73,7 +86,8 @@ paths:
                   description: arxiv ID.
                   type: string
                 show_abstract:
-                  description: Include the abstract in the response. Defaults to False.
+                  default: true
+                  description: Include the abstract in the response.
                   type: boolean
               required:
               - paper_id
@@ -81,6 +95,25 @@ paths:
         required: true
       responses:
         '200':
+          content:
+            application/json:
+              schema:
+                properties:
+                  abstract:
+                    type: string
+                  authors:
+                    type: string
+                  can_read_citation:
+                    type: boolean
+                  date:
+                    type: string
+                  id:
+                    type: string
+                  table_of_contents:
+                    type: string
+                  title:
+                    type: string
+                type: object
           description: OK
       summary: 'Read the metadata of a paper, where available. Including the paper''s
         id, title, date, authors, abstract, table_of_contents, can_read_citation.'
@@ -110,7 +143,11 @@ paths:
         required: true
       responses:
         '200':
-          description: OK
+          content:
+            application/json:
+              schema:
+                type: string
+          description: Section title and content
       summary: Read a specific section from the table of contents of a paper.
   /search:
     post:
@@ -122,31 +159,54 @@ paths:
             schema:
               properties:
                 count:
-                  description: The number of results to return. Defaults to 5.
+                  default: 8
+                  description: The number of results to return.
                   type: integer
                 method:
-                  description: The search method to use. Defaults to semantic search.
+                  default: semantic
+                  description: The search method to use.
                   enum:
                   - keyword
                   - semantic
                   - similarity
                   type: string
                 page:
-                  description: Pagination index. Defaults to 1.
+                  default: 1
+                  description: Pagination index.
                   type: integer
                 query:
                   description: The user's query.
                   type: string
                 year:
+                  anyOf:
+                  - type: integer
+                  - type: 'null'
+                  default: null
                   description: The year to filter results by. Defaults to None, for
                     any year.
-                  type: integer
               required:
               - query
               type: object
         required: true
       responses:
         '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  properties:
+                    abstract_snippet:
+                      type: string
+                    date:
+                      type: string
+                    first_author:
+                      type: string
+                    id:
+                      type: string
+                    title:
+                      type: string
+                  type: object
+                type: array
           description: OK
       summary: 'Searches for arxiv articles using the user''s query.
 
