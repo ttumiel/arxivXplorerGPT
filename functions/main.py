@@ -28,11 +28,8 @@ def request_handler(fn=None, allow_cors=True, secrets=None):
     @functools.wraps(fn)
     def thunk(request: https_fn.Request):
         try:
-            # TODO: Should I change post only to post or get?
-            args = request.json if request.method == "POST" and request.is_json else {}
-            result = function_call(
-                "fn", args, {"fn": fn}, validate=True, from_json=False
-            )
+            args = request.json if request.is_json else {}
+            result = function_call(fn, args, validate=True, from_json=False)
             return https_fn.Response(result, mimetype="application/json")
         except Exception as e:
             print(f"ERROR :: Function {fn.__name__} failed:\n", traceback.format_exc())
