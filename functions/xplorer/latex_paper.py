@@ -5,7 +5,7 @@ import traceback
 from typing import Dict, List, Tuple
 
 import texttable
-from plasTeX import DOM, Config, TeX, TeXDocument
+from plasTeX import DOM, Base, Config, TeX, TeXDocument
 from plasTeX.Logging import disableLogging
 from pylatexenc.latex2text import (EnvironmentTextSpec, LatexNodes2Text,
                                    MacroTextSpec, get_default_latex_context_db)
@@ -48,13 +48,15 @@ def local_kpsewhich(self, name):
 TeX.TeX.kpsewhich = local_kpsewhich
 
 
-def handle_cite(node: LatexMacroNode, l2tobj: LatexNodes2Text):
-    citation_key = l2tobj.nodelist_to_text(node.nodeargd.argnlist)
-    return f"<cit. {citation_key}>"
+def labeller(name: str):
+    def handle(node: LatexMacroNode, l2tobj: LatexNodes2Text):
+        try:
+            key = l2tobj.nodelist_to_text(node.nodeargd.argnlist)
+            return f"<{name}. {key}>"
+        except Exception:
+            return f"<{name}>"
 
-
-def handle_includegraphics(node):
-    return "<image>"
+    return handle
 
 
 def handle_href(node: LatexMacroNode, l2tobj):
@@ -77,9 +79,11 @@ class LatexPaper(Paper):
             "custom",
             prepend=True,
             macros=[
-                MacroTextSpec("cite", simplify_repl=handle_cite),
-                MacroTextSpec("citep", simplify_repl=handle_cite),
-                MacroTextSpec("includegraphics", simplify_repl=handle_includegraphics),
+                MacroTextSpec("cite", simplify_repl=labeller("cite")),
+                MacroTextSpec("citep", simplify_repl=labeller("cite")),
+                MacroTextSpec("ref", simplify_repl=labeller("ref")),
+                MacroTextSpec("label", simplify_repl=labeller("label")),
+                MacroTextSpec("includegraphics", simplify_repl=labeller("image")),
                 MacroTextSpec("href", simplify_repl=handle_href),
                 MacroTextSpec("url", simplify_repl="%s"),
                 MacroTextSpec("item", simplify_repl=handle_item),
@@ -95,6 +99,8 @@ class LatexPaper(Paper):
         config = Config.defaultConfig()
         config["general"]["load-tex-packages"] = False
         ownerDocument = TeXDocument(config=config)
+        ownerDocument.context.contexts[0]["citep"] = Base.cite
+        ownerDocument.context.contexts[0]["citet"] = Base.cite
         tex = TeX.TeX(file=filename, ownerDocument=ownerDocument)
         self.tex_doc = tex.parse()
         self.title = self.title or self.get_title(self.tex_doc)
