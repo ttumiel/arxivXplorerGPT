@@ -1,20 +1,20 @@
+import gzip
 import logging
 import os
 import random
-import re
 import shutil
 import tarfile
 import tempfile
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, fields
 from datetime import datetime
-from typing import Dict, List, Optional, TypedDict, Union
+from typing import Dict, List, Optional, Union
 
 import arxiv
 import requests
 from firebase_admin import db, firestore
 from google.cloud import firestore as g_firestore
-from google.cloud import storage
+from typing_extensions import TypedDict
 from xplorer.latex_paper import LatexPaper, Paper, guess_main_tex_file
 from xplorer.pdf_paper import PDFPaper
 from xplorer.vector_store import VectorStore
@@ -149,54 +149,50 @@ class PaperCache:
             paper.summary,
         )
 
-    def extract_tar_file(self, tar_path, output_dir):
-        with tarfile.open(tar_path, "r:gz") as tar:
-            tar.extractall(path=output_dir)
+    def extract_source(self, file_path, output_dir):
+        "Arxiv source is either a tar.gz folder or a gzipped tex file."
+        if tarfile.is_tarfile(file_path):
+            with tarfile.open(file_path, "r:gz") as tar:
+                tar.extractall(path=output_dir)
+        else:
+            with gzip.open(file_path, "rb") as f_in:
+                output_file_path = os.path.join(output_dir, "main.tex")
+                os.makedirs(output_dir, exist_ok=True)
+                with open(output_file_path, "wb") as f_out:
+                    f_out.write(f_in.read())
 
-    def fetch_pdf_paper(
-        self, arxiv_id, output_dir, title: Optional[str] = None
-    ) -> PDFPaper:
+    def fetch_pdf_paper(self, arxiv_id: str, title: Optional[str] = None) -> PDFPaper:
         try:
-            bucket_name = "arxiv-dataset"
-            storage_client = storage.Client()
-            bucket = storage_client.bucket(bucket_name)
-
-            prefix = f"arxiv/arxiv/pdf/{arxiv_id[:4]}/{arxiv_id}"
-            blob_name = max(blob.name for blob in bucket.list_blobs(prefix=prefix))
-            blob = bucket.blob(blob_name)
-
-            os.makedirs(output_dir, exist_ok=True)
-            destination_file_name = os.path.join(output_dir, f"{arxiv_id}.pdf")
-            blob.download_to_filename(destination_file_name)
-
-            return PDFPaper(destination_file_name, title=title)
+            paper = next(arxiv.Search(id_list=[arxiv_id], max_results=1).results())
+            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as temp_file:
+                directory, filename = os.path.split(temp_file.name)
+                paper.download_pdf(directory, filename)
+                return PDFPaper(temp_file.name, title=title)
         except Exception as e:
             logger.error(f"Error fetching pdf paper: {e}")
             return None
 
-    def download_arxiv_source(self, arxiv_id, output_dir) -> str:
+    def download_arxiv_source(self, arxiv_id) -> str:
         source_url = f"https://export.arxiv.org/e-print/{arxiv_id}"
-        os.makedirs(output_dir, exist_ok=True)
 
         response = requests.get(source_url)
         response.raise_for_status()
-        output_dir = os.path.join(output_dir, f"{arxiv_id}.tar.gz")
-        with open(output_dir, "wb") as f:
-            f.write(response.content)
 
-        return output_dir
+        with tempfile.NamedTemporaryFile(suffix=".gz", delete=False) as temp_file:
+            temp_file.write(response.content)
+            temp_file_path = temp_file.name
 
-    def fetch_source_paper(
-        self, paper_id, output_dir, title: Optional[str] = None
-    ) -> LatexPaper:
+        return temp_file_path
+
+    def fetch_source_paper(self, paper_id, title: Optional[str] = None) -> LatexPaper:
         # TODO: parallel download, and set timeout for parsing
         try:
             # Download the source
-            filename = self.download_arxiv_source(paper_id, output_dir)
+            filename = self.download_arxiv_source(paper_id)
 
             # extract the tar file
-            datadir = re.sub(r"\.(tgz|tar\.gz)$", "", filename)
-            self.extract_tar_file(filename, datadir)
+            datadir = filename.replace(".gz", "")
+            self.extract_source(filename, datadir)
 
             # delete the tar file
             os.remove(filename)
@@ -219,10 +215,9 @@ class PaperCache:
         """Attempt to download and parse an arxiv paper. First from latex source
         and then from the PDF, if the source fails.
         """
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            paper = self.fetch_source_paper(paper_id, tmpdirname, title)
-            if paper is None:
-                paper = self.fetch_pdf_paper(paper_id, tmpdirname, title)
+        paper = self.fetch_source_paper(paper_id, title)
+        if paper is None:
+            paper = self.fetch_pdf_paper(paper_id, title)
 
         assert paper is not None, "Couldn't fetch paper."
         return paper
@@ -250,6 +245,9 @@ class DBCache(ABC):
     @abstractmethod
     def lru_delete(self):
         "Deletes the least recently used entries in the DB beyond the db's max size."
+
+    def _sanitize_path(self, path: str) -> str:
+        return path.replace("/", "_").replace(".", "_")
 
 
 class LocalPaperCache(DBCache):
@@ -293,6 +291,7 @@ class FirestorePaperCache(DBCache):
         self.collection_name = collection_name
 
     def __setitem__(self, paper_id: str, paper: PaperData):
+        paper_id = self._sanitize_path(paper_id)
         with self.db.transaction():
             doc_ref = self.db.collection(self.collection_name).document(paper_id)
             doc_ref.set(
@@ -300,6 +299,7 @@ class FirestorePaperCache(DBCache):
             )
 
     def __getitem__(self, paper_id: str) -> Optional[PaperData]:
+        paper_id = self._sanitize_path(paper_id)
         doc_ref = self.db.collection(self.collection_name).document(paper_id)
         doc = doc_ref.get()
         if doc.exists:
@@ -357,6 +357,3 @@ class RealtimeDBPaperCache(DBCache):
 
     def lru_delete(self) -> int:
         raise NotImplementedError
-
-    def _sanitize_path(self, path: str) -> str:
-        return path.replace(".", "_").replace("/", "_")
