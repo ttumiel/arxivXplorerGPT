@@ -21,7 +21,7 @@ def request_handler(fn=None, allow_cors=True, secrets=None):
         secrets=secrets,
         cors=options.CorsOptions(cors_origins=[r"*"], cors_methods=["get", "post"]),
         memory=options.MemoryOption.GB_1,
-        region=options.SupportedRegion.US_WEST1,
+        region=options.SupportedRegion.US_CENTRAL1,
         max_instances=10,
         cpu=1,
     )
@@ -72,7 +72,7 @@ def search(
 @scheduler_fn.on_schedule(
     schedule="0 5 * * 0",
     timezone=scheduler_fn.Timezone("Etc/UTC"),
-    region=options.SupportedRegion.US_WEST1,
+    region=options.SupportedRegion.US_CENTRAL1,
     memory=options.MemoryOption.MB_256,
     max_instances=1,
     cpu=1,

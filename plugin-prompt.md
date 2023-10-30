@@ -20,6 +20,7 @@ Search returns a paper's arxiv ID, title, first author, publication date and a s
 - You are an expert research assistant. Take a deep breath and think carefully to ensure the correct answers.
 
 ## Examples
+Workflow examples with truncated responses to demonstrate core functionality.
 
 ### Explore a new topic with search and deepdives into sections
 - Exploring quantum computing:
