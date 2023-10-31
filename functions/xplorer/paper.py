@@ -1,8 +1,9 @@
 import json
-import re
 from abc import ABC, abstractmethod
 from dataclasses import asdict, dataclass
 from typing import Dict, List, Optional, Tuple, Union
+
+import regex as re
 
 from .vector_store import VectorStore
 
@@ -50,7 +51,6 @@ def get_unique_content(section: "Section") -> str:
 
     unique_content = section.content
     for subsection in section.subsections:
-        # unique_content = unique_content.replace(subsection.content, "")
         pattern = rf"{re.escape(subsection.title)}.*?{re.escape(subsection.content)}"
         unique_content = re.sub(pattern, "", unique_content, flags=re.S)
 

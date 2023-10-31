@@ -11,3 +11,4 @@ pdfminer.six
 numpy
 openai
 tenacity
+regex
