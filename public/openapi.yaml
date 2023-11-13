@@ -3,10 +3,13 @@ info:
   title: arXiv Xplorer
   version: v1
 openapi: 3.0.1
+servers:
+  - url: https://api.arxivxplorer.com
 paths:
   /chunk_search:
     post:
       operationId: chunk_search
+      x-openai-isConsequential: false
       parameters: []
       requestBody:
         content:
@@ -46,6 +49,7 @@ paths:
   /read_citation:
     post:
       operationId: read_citation
+      x-openai-isConsequential: false
       parameters: []
       requestBody:
         content:
@@ -76,6 +80,7 @@ paths:
   /read_paper_metadata:
     post:
       operationId: read_paper_metadata
+      x-openai-isConsequential: false
       parameters: []
       requestBody:
         content:
@@ -120,6 +125,7 @@ paths:
   /read_section:
     post:
       operationId: read_section
+      x-openai-isConsequential: false
       parameters: []
       requestBody:
         content:
@@ -152,6 +158,7 @@ paths:
   /search:
     post:
       operationId: search
+      x-openai-isConsequential: false
       parameters: []
       requestBody:
         content:
