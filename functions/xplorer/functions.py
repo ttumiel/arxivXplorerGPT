@@ -11,6 +11,7 @@ import requests
 from chat2func import json_schema
 from chat2func.server import FunctionServer
 from xplorer.db import PaperCache, PaperData, PaperMetadata, PaperSearchResult
+from xplorer.paper import FigureData
 
 logger = logging.getLogger(__name__)
 
@@ -123,7 +124,7 @@ class ArxivXplorerAPI:
         self, paper_id: str, show_abstract: bool = True
     ) -> PaperMetadata:
         """Read the metadata of a paper, where available. Including the paper's id,
-        title, date, authors, abstract, table_of_contents, can_read_citation.
+        title, date, authors, abstract, table_of_contents, can_read_citation, and number of figures.
 
         Args:
             paper_id (str): arxiv ID.
@@ -151,7 +152,7 @@ class ArxivXplorerAPI:
             section_id (Union[int, List[int]]): 1-indexed section ID, or list of subsection ids.
 
         Returns:
-            Section title and content
+            Section title, content and figures.
         """
         # Zero-indexed inside paper
         if isinstance(section_id, int):
@@ -159,7 +160,10 @@ class ArxivXplorerAPI:
         else:
             section_id = [i - 1 for i in section_id]
 
-        return str(self[paper_id].paper[section_id])
+        section = self[paper_id].paper[section_id]
+        figures = self.cache.get_paper_figures(paper_id, section.figures.keys())
+
+        return {"content": str(section), "figures": figures}
 
     @json_schema
     @error_logger
@@ -176,6 +180,35 @@ class ArxivXplorerAPI:
         paper = self[paper_id].paper
         assert paper.can_read_citation, "Paper does not support getting citations."
         return paper.get_citation(citation)
+
+    @json_schema
+    @error_logger
+    def get_figure(self, paper_id: str, figure_id: str) -> FigureData:
+        """Get an image URL, caption, and section title.
+
+        Args:
+            paper_id (str): arxiv ID.
+            citation (str): The image ref to lookup. e.g. `demo` from the figure `<figure. demo - This is the caption>`
+        """
+        return self.cache.get_paper_figures(paper_id, figure_ids=[figure_id])[0]
+
+    @json_schema
+    @error_logger
+    def list_all_figures(self, paper_id: str) -> List[FigureData]:
+        """Get the image URL, caption, and section title for all images in a paper.
+
+        Args:
+            paper_id (str): arxiv ID.
+
+        Returns:
+            A list of all the images in a paper.
+        """
+        figures = self[paper_id].paper.figures.keys()
+        figures = self.cache.get_paper_figures(paper_id, figure_ids=figures)
+        if self.cache.storage is not None:
+            self.cache.storage.delete_data_path(paper_id)
+
+        return figures
 
     def parse_query_string(
         self, query: str, count: int, page: int = 1, year: Optional[int] = None

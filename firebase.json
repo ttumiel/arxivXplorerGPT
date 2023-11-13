@@ -36,6 +36,14 @@
       {
         "source": "/chunk_search",
         "function": "chunk_search"
+      },
+      {
+        "source": "/get_image",
+        "function": "get_image"
+      },
+      {
+        "source": "/list_images",
+        "function": "list_images"
       }
     ],
     "ignore": [
@@ -56,6 +64,9 @@
       }
     ]
   },
+  "storage": {
+    "rules": "storage.rules"
+  },
   "emulators": {
     "functions": {
       "port": 5001
@@ -72,6 +83,9 @@
     "ui": {
       "enabled": true
     },
-    "singleProjectMode": true
+    "singleProjectMode": true,
+    "storage": {
+      "port": 9199
+    }
   }
 }

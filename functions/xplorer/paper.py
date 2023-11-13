@@ -1,7 +1,7 @@
 import json
 from abc import ABC, abstractmethod
 from dataclasses import asdict, dataclass
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, TypedDict, Union
 
 import regex as re
 
@@ -57,15 +57,29 @@ def get_unique_content(section: "Section") -> str:
     return unique_content
 
 
+class FigureData(TypedDict, total=False):
+    label: str
+    url: List[str]
+    path: List[str]
+    caption: Optional[str]
+    section: Optional[str]
+    size: Optional[List[Dict[str, float]]]
+
+
 @dataclass
 class Section:
     title: str
     content: str
     subsections: Optional[List["Section"]] = None
+    figures: Optional[Dict[str, FigureData]] = None
 
     @property
     def num_words(self):
         return len(self.content.split())
+
+    @property
+    def num_figures(self):
+        return len(self.figures) if self.figures else 0
 
     @property
     def chunks(self):
@@ -81,7 +95,9 @@ class Section:
             if data.get("subsections", None)
             else []
         )
-        return cls(data["title"], data["content"], subsections)
+        return cls(
+            data["title"], data["content"], subsections, data.get("figures", None)
+        )
 
 
 class Paper(ABC):
@@ -90,11 +106,13 @@ class Paper(ABC):
     title: str
     methods: Dict[str, bool]
     store: VectorStore = None
+    figures: Dict[str, FigureData] = None
 
     def __init__(self, filename, title=None):
         self.title = title
         self.tree = self.build(filename)
         self.methods = {"read_content": True, "table_of_contents": bool(self.sections)}
+        self.figures = self.collect_figures()
 
         self.bibliography = self.build_bibliography()
         self.methods["get_citation"] = bool(self.bibliography)
@@ -113,17 +131,13 @@ class Paper(ABC):
         self, chunk_size: int = 250, overlap: int = 15, min_len: int = 50
     ) -> List[str]:
         chunks = []
-
-        def chunk_section(section: Section, section_id: str = ""):
+        for title, section in self.flatten_sections(
+            self.tree, show_images=False, show_words=False
+        ):
             unique_content = get_unique_content(section)
             for c in chunk(unique_content, chunk_size, overlap, min_len):
-                chunks.append(f"{section_id} {section.title}\n{c}")
+                chunks.append(f"{title.strip()}\n{c}")
 
-            if section.subsections:
-                for i, subsection in enumerate(section.subsections, start=1):
-                    chunk_section(subsection, section_id + f"{i}.")
-
-        chunk_section(self.tree)
         return chunks
 
     def chunk_search(self, query: str, count: int = 3):
@@ -160,13 +174,34 @@ class Paper(ABC):
 
     @property
     def table_of_contents(self):
-        return "\n".join(self.section_contents(self.tree.subsections))
+        return "\n".join(
+            title for title, _ in self.flatten_sections(self.tree.subsections)
+        )
 
     @property
     def can_read_citation(self):
         return self.methods["get_citation"]
 
-    def section_contents(self, sections: Section, level: int = 0):
+    def collect_figures(self) -> Dict[str, FigureData]:
+        figures = {}
+        for title, section in self.flatten_sections(
+            self.tree.subsections, show_images=False, show_words=False
+        ):
+            if section.figures:
+                for im in section.figures.values():
+                    im["section"] = title.strip()
+                figures.update(section.figures)
+
+        return figures
+
+    def flatten_sections(
+        self,
+        sections: Section,
+        level: int = 0,
+        prefix: str = "",
+        show_images: bool = True,
+        show_words: bool = True,
+    ):
         """
         Generate a table of contents from a list of sections.
 
@@ -174,25 +209,43 @@ class Paper(ABC):
         and 'subsections', where 'subsections' is a list of subsections in the
         same format.
 
-        Returns:
-            List of strings, where each string represents a
-            line in the table of contents.
+        Yields:
+            String line from the table of contents.
         """
-        contents = []
+        if isinstance(sections, Section):
+            yield sections.title, sections
+            sections = sections.subsections
 
         for i, section in enumerate(sections, start=1):
-            title = section.title
+            section_number = f"{prefix}{i}."
             indent = "  " * level
-            contents.append(f"{indent}{i}. {title} ({section.num_words} words)")
+            info = []
+
+            if show_words:
+                info.append(f"{section.num_words} words")
+
+            n_images = section.num_figures
+            if show_images and n_images:
+                im_info = f"{n_images} figure"
+                if n_images > 1:
+                    im_info += "s"
+                info.append(im_info)
+
+            info = ", ".join(info)
+            if info:
+                info = " (" + info + ")"
+
+            yield f"{indent}{section_number} {section.title}{info}", section
 
             # Recursively generate the table of contents for the subsections
             if section.subsections:
-                subsection_contents = self.section_contents(
-                    section.subsections, level=level + 1
+                yield from self.flatten_sections(
+                    section.subsections,
+                    level=level + 1,
+                    prefix=section_number,
+                    show_images=show_images,
+                    show_words=show_words,
                 )
-                contents.extend(subsection_contents)
-
-        return contents
 
     def __repr__(self):
         return self.title + "\n" + self.table_of_contents
@@ -206,6 +259,9 @@ class Paper(ABC):
         if vectors:
             data["store"] = (self.store.dump() if self.store else None,)
 
+        if self.figures:
+            data["figures"] = json.dumps(self.figures)
+
         return data
 
     @classmethod
@@ -215,6 +271,9 @@ class Paper(ABC):
                 super().__init__(None, data["title"])
                 if "store" in data and data["store"] is not None:
                     self.store = VectorStore.load(data["store"])
+
+                if "figures" in data:
+                    self.figures = json.loads(data["figures"])
 
             def build(self, filename=None):
                 return Section.from_dict(json.loads(data["tree"]))

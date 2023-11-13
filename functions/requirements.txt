@@ -2,13 +2,16 @@ firebase-admin
 firebase-functions
 chat2func
 # Append all other project requirements here:
-arxiv
-plasTeX
-pylatexenc
-texttable
-requests
-pdfminer.six
+arxiv==2.*
+plastex==3.*
+pylatexenc==2.*
+texttable==1.*
+requests==2.*
 numpy
-openai
-tenacity
+openai==0.*
+tenacity==8.*
 regex
+pillow
+cairosvg==2.*
+pymupdf==1.*
+pdf2image==1.*

@@ -21,7 +21,7 @@ def request_handler(fn=None, allow_cors=True, secrets=None):
         secrets=secrets,
         cors=options.CorsOptions(cors_origins=[r"*"], cors_methods=["get", "post"]),
         memory=options.MemoryOption.GB_1,
-        region=options.SupportedRegion.US_CENTRAL1,
+        region=options.SupportedRegion.US_WEST1,
         max_instances=10,
         cpu=1,
     )
@@ -69,10 +69,20 @@ def search(
     return api.search(query, count, page, year, method)
 
 
+@request_handler
+def get_figure(paper_id: str, image_id: str):
+    return api.get_figure(paper_id, image_id)
+
+
+@request_handler
+def list_figures(paper_id: str):
+    return api.list_all_figures(paper_id)
+
+
 @scheduler_fn.on_schedule(
     schedule="0 5 * * 0",
     timezone=scheduler_fn.Timezone("Etc/UTC"),
-    region=options.SupportedRegion.US_CENTRAL1,
+    region=options.SupportedRegion.US_WEST1,
     memory=options.MemoryOption.MB_256,
     max_instances=1,
     cpu=1,

@@ -1,7 +1,9 @@
 import gzip
+import json
 import logging
 import os
 import random
+import re
 import shutil
 import tarfile
 import tempfile
@@ -11,11 +13,14 @@ from datetime import datetime
 from typing import Dict, List, Optional, Union
 
 import arxiv
+import fitz
 import requests
-from firebase_admin import db, firestore
+from firebase_admin import db, firestore, storage
 from google.cloud import firestore as g_firestore
 from typing_extensions import TypedDict
+from xplorer.images import get_file_from_zip, pack_images, process_image
 from xplorer.latex_paper import LatexPaper, Paper, guess_main_tex_file
+from xplorer.paper import FigureData
 from xplorer.pdf_paper import PDFPaper
 from xplorer.vector_store import VectorStore
 
@@ -52,13 +57,15 @@ class PaperData:
     paper: Optional[Paper] = None
 
     def to_dict(self, show_abstract=True) -> PaperMetadata:
-        return {
+        data = {
             f.name: attr
             for f in fields(self)
             if (attr := getattr(self, f.name))
             and (show_abstract or f.name != "abstract")
             and f.name != "paper"
         }
+        data["num_figures"] = len(self.paper.figures) if self.paper else 0
+        return data
 
     def dump(self) -> Dict[str, Optional[str]]:
         return {
@@ -85,8 +92,9 @@ class PaperCache:
         if firestore_collection:
             self.firestore_db = FirestorePaperCache(firestore_collection, limit=5000)
             self.realtime_db = RealtimeDBPaperCache(limit=5000)
+            self.storage = Storage()
         else:
-            self.firestore_db = self.realtime_db = None
+            self.firestore_db = self.realtime_db = self.storage = None
 
     def __getitem__(self, paper_id: str) -> PaperData:
         """Read a paper from the cache if it exists, otherwise download and parse it."""
@@ -124,11 +132,34 @@ class PaperCache:
         self.realtime_db[paper_id] = store
         return store
 
+    def get_paper_figures(
+        self, paper_id: str, figure_ids: List[str]
+    ) -> List[FigureData]:
+        paper = self[paper_id].paper
+        to_fetch = []
+        for figure_id in figure_ids:
+            figure_data = paper.figures[figure_id]
+            if "url" not in figure_data:
+                to_fetch.append(figure_data)
+
+        if len(to_fetch) > 0:
+            self.storage.fetch_figure_urls(paper_id, to_fetch)
+            self.firestore_db.update(
+                paper_id, {"paper.paper.figures": json.dumps(paper.figures)}
+            )
+
+        return [paper.figures[figure_id] for figure_id in figure_ids]
+
     def __setitem__(self, paper_id: str, paper: PaperData):
         self.local_db[paper_id] = paper
         self.firestore_db[paper_id] = paper
         if paper.paper.store is not None:
             self.realtime_db[paper_id] = paper.paper.store
+
+    def _clean_spaces(self, text) -> str:
+        text = text.replace("\n", " ")
+        text = re.sub(r"\s+", " ", text)
+        return text.strip()
 
     def get_paper_details(self, paper_id: str) -> PaperData:
         """
@@ -146,7 +177,7 @@ class PaperCache:
             paper.title,
             paper.published.strftime("%Y-%m-%d"),
             ", ".join(str(a) for a in paper.authors),
-            paper.summary,
+            self._clean_spaces(paper.summary),
         )
 
     def extract_source(self, file_path, output_dir):
@@ -167,7 +198,9 @@ class PaperCache:
             with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as temp_file:
                 directory, filename = os.path.split(temp_file.name)
                 paper.download_pdf(directory, filename)
-                return PDFPaper(temp_file.name, title=title)
+                paper = PDFPaper(temp_file.name, title=title)
+                self.upload_paper_images(arxiv_id, paper)
+                return paper
         except Exception as e:
             logger.error(f"Error fetching pdf paper: {e}")
             return None
@@ -200,6 +233,7 @@ class PaperCache:
             # Extract the text
             main_file = guess_main_tex_file(datadir)
             paper = LatexPaper(main_file, title=title)
+            self.upload_paper_images(paper_id, paper)
 
             # Remove the extracted files
             shutil.rmtree(datadir)
@@ -222,8 +256,19 @@ class PaperCache:
         assert paper is not None, "Couldn't fetch paper."
         return paper
 
+    def upload_paper_images(self, paper_id: str, paper: Paper):
+        image_paths = []
+        for figure in paper.figures.values():
+            image_paths.extend(figure["path"])
+            figure["path"] = [os.path.basename(path) for path in figure["path"]]
+
+        with tempfile.NamedTemporaryFile(suffix=".zip") as temp_file:
+            pack_images(image_paths, temp_file.name, compression=1)
+            self.storage.upload_paper_images(paper_id, temp_file.name)
+
     def lru_delete_remote(self) -> int:
         deleted_ids = self.firestore_db.lru_delete()
+        self.storage.lru_delete(deleted_ids)
         for paper_id in deleted_ids:
             self.realtime_db.delete(paper_id)
         return len(deleted_ids)
@@ -266,6 +311,7 @@ class LocalPaperCache(DBCache):
         if paper_id in self.db:
             record = self.db[paper_id]
             record["timestamp"] = datetime.now()
+            # TODO: Do I need to dump and reload the paper if its in mem?
             return PaperData.load(record["paper"])
         else:
             return None
@@ -313,6 +359,13 @@ class FirestorePaperCache(DBCache):
 
         return None
 
+    def update(self, paper_id: str, diff: dict):
+        paper_id = self._sanitize_path(paper_id)
+        doc_ref = self.db.collection(self.collection_name).document(paper_id)
+        doc = doc_ref.get()
+        if doc.exists:
+            doc_ref.update(diff)
+
     def lru_delete(self) -> List[str]:
         # Get the count of documents in the collection
         results = self.db.collection(self.collection_name).count(alias="all").get()
@@ -357,3 +410,99 @@ class RealtimeDBPaperCache(DBCache):
 
     def lru_delete(self) -> int:
         raise NotImplementedError
+
+
+class Storage:
+    def __init__(self) -> None:
+        self.bucket = storage.bucket()
+
+    def upload_paper_images(self, paper_id: str, data_name: str):
+        self.upload_from_file(self._make_data_path(paper_id, data_name), data_name)
+
+    def upload_from_string(self, name: str, image: bytes):
+        blob = self.bucket.blob(name)
+        blob.upload_from_string(image)
+        return blob._get_download_url(self.bucket.client).split("?")[0]
+
+    def upload_from_file(self, name: str, file_path: str):
+        blob = self.bucket.blob(name)
+        blob.upload_from_filename(file_path)
+
+    def download_file(self, file_path: str, output_path: str):
+        blob = self.bucket.blob(file_path)
+        blob.download_to_filename(output_path)
+
+    def lru_delete(self, paper_ids: List[str]):
+        for paper_id in paper_ids:
+            self.delete_images(paper_id)
+
+    def delete_images(self, paper_id: str):
+        warning = lambda e: logger.warning(f"Couldn't delete blob. {e}")
+        self.delete_data_path(paper_id)
+        blobs = self.bucket.list_blobs(prefix=f"img/{self._sanitize_path(paper_id)}/")
+        self.bucket.delete_blobs(blobs, on_error=warning)
+
+    def delete_data_path(self, paper_id: str):
+        warning = lambda e: logger.warning(f"Couldn't delete blob. {e}")
+        self.bucket.delete_blobs([self._get_data_path(paper_id)], on_error=warning)
+
+    def _sanitize_path(self, path: str) -> str:
+        return path.replace("/", "_").replace(".", "_")
+
+    def _make_data_path(self, paper_id: str, filename: str):
+        ext = os.path.splitext(filename)[1]
+        return f"papers/{self._sanitize_path(paper_id)}_images{ext}"
+
+    def _get_data_path(self, paper_id: str):
+        return self.bucket.list_blobs(
+            prefix=f"papers/{self._sanitize_path(paper_id)}_images."
+        )[0]
+
+    def fetch_figure_urls(self, paper_id: str, figures: List[FigureData]):
+        path = self._get_data_path(paper_id)
+        if path.endswith(".pdf"):
+            self._fetch_pdf_figure_urls(paper_id, figures)
+        else:
+            self._fetch_latex_figure_urls(paper_id, figures)
+
+    def _upload_image(self, paper_id: str, image_bytes: bytes, name: str):
+        filename = (
+            f"img/{self._sanitize_path(paper_id)}/{self._sanitize_path(name)}.png"
+        )
+        return self.upload_from_string(filename, image_bytes)
+
+    def _fetch_pdf_figure_urls(self, paper_id, figures: List[FigureData]):
+        with tempfile.NamedTemporaryFile(suffix=".pdf") as temp_file:
+            self.download_file(self._get_data_path(paper_id), temp_file.name)
+            doc = fitz.open(temp_file.name)
+            for figure in figures:
+                image_data = doc.extract_image(figure["path"])
+                image_bytes = process_image(
+                    image_data["image"], format=image_data["ext"]
+                )
+                if image_bytes is not None:
+                    url = self._upload_image(paper_id, image_bytes, figure["label"])
+                    figure["url"] = [url]
+
+                del figure["path"]
+
+    def _fetch_latex_figure_urls(self, paper_id: str, figures: List[FigureData]):
+        with tempfile.NamedTemporaryFile(suffix=".zip") as temp_file:
+            self.download_file(self._get_data_path(paper_id), temp_file.name)
+
+            for figure in figures:
+                figure_urls = []
+
+                for path, size in zip(figure["path"], figure["size"]):
+                    image_data = get_file_from_zip(temp_file.name, path)
+                    img_bytes = process_image(
+                        image_data, format=os.path.splitext(path)[1][1:], **size
+                    )
+
+                    if img_bytes is not None:
+                        url = self._upload_image(paper_id, img_bytes, path)
+                        figure_urls.append(url)
+
+                figure["url"] = figure_urls or None
+                del figure["path"]
+                del figure["size"]

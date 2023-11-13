@@ -5,104 +5,18 @@ import traceback
 from typing import Dict, List, Tuple
 
 import texttable
-from plasTeX import DOM, Base, Config, TeX, TeXDocument
-from plasTeX.Logging import disableLogging
-from pylatexenc.latex2text import (EnvironmentTextSpec, LatexNodes2Text,
-                                   MacroTextSpec, get_default_latex_context_db)
-from pylatexenc.latexwalker import LatexMacroNode
-from xplorer.paper import Paper, Section
+from plasTeX import DOM, TeX
+from xplorer.latex import TeXParser, TextEncoder
+from xplorer.paper import FigureData, Paper, Section
 
-disableLogging()
 logger = logging.getLogger(__name__)
-
-
-def local_kpsewhich(self, name):
-    "Locate the given file in the source directory and TEXINPUTS paths."
-    try:
-        srcDir = os.path.dirname(self.filename)
-    except AttributeError:
-        srcDir = "."
-
-    texinputs = os.environ.get("TEXINPUTS", ".").split(os.path.pathsep)
-    search_paths = [srcDir] + texinputs
-
-    # Search for the file in the source directory and TEXINPUTS
-    for path in search_paths:
-        if not path:
-            continue
-
-        # Check with suffix
-        candidate_path = os.path.join(path, name)
-        if os.path.exists(candidate_path):
-            return os.path.abspath(candidate_path)
-
-        # Check without suffix by matching any file that starts with the name
-        for candidate in os.listdir(path):
-            if candidate.startswith(name + "."):
-                return os.path.abspath(os.path.join(path, candidate))
-
-    raise FileNotFoundError(f"Could not find any file named: {name}")
-
-
-# Monkey patch the method onto the Tex class
-TeX.TeX.kpsewhich = local_kpsewhich
-
-
-def labeller(name: str):
-    def handle(node: LatexMacroNode, l2tobj: LatexNodes2Text):
-        try:
-            key = l2tobj.nodelist_to_text(node.nodeargd.argnlist)
-            return f"<{name}. {key}>"
-        except Exception:
-            return f"<{name}>"
-
-    return handle
-
-
-def handle_href(node: LatexMacroNode, l2tobj):
-    return "[{}]({})".format(
-        l2tobj.nodelist_to_text([node.nodeargd.argnlist[1]]),
-        l2tobj.nodelist_to_text([node.nodeargd.argnlist[0]]),
-    )
-
-
-def handle_item(node: LatexMacroNode, l2tobj: LatexNodes2Text):
-    return l2tobj.node_to_text(node.nodeoptarg) if node.nodeoptarg else "- "
 
 
 class LatexPaper(Paper):
     def build(self, filename) -> Section:
         assert filename.endswith(".tex") and os.path.isfile(filename)
-
-        l2t_context_db = get_default_latex_context_db()
-        l2t_context_db.add_context_category(
-            "custom",
-            prepend=True,
-            macros=[
-                MacroTextSpec("cite", simplify_repl=labeller("cit")),
-                MacroTextSpec("citep", simplify_repl=labeller("cit")),
-                MacroTextSpec("ref", simplify_repl=labeller("ref")),
-                MacroTextSpec("label", simplify_repl=labeller("label")),
-                MacroTextSpec("includegraphics", simplify_repl=labeller("image")),
-                MacroTextSpec("href", simplify_repl=handle_href),
-                MacroTextSpec("url", simplify_repl="%s"),
-                MacroTextSpec("item", simplify_repl=handle_item),
-            ],
-            environments=[
-                EnvironmentTextSpec("enumerate", simplify_repl="\n%s"),
-                EnvironmentTextSpec("exenumerate", simplify_repl="\n%s"),
-                EnvironmentTextSpec("itemize", simplify_repl="\n%s"),
-            ],
-        )
-        self.l2t = LatexNodes2Text(latex_context=l2t_context_db)
-
-        config = Config.defaultConfig()
-        config["general"]["load-tex-packages"] = False
-        ownerDocument = TeXDocument(config=config)
-        ownerDocument.context.contexts[0]["citep"] = Base.cite
-        ownerDocument.context.contexts[0]["citet"] = Base.cite
-        tex = TeX.TeX(file=filename, ownerDocument=ownerDocument)
-        self.tex_doc = tex.parse()
+        self.encode = TextEncoder()
+        self.tex_doc = TeXParser(filename).parse()
         self.title = self.title or self.get_title(self.tex_doc)
         tree = self.build_tree()
         return tree
@@ -118,32 +32,30 @@ class LatexPaper(Paper):
         if title is not None:
             return title.textContent
 
-    def encode(self, latex: str):
-        try:
-            return self.l2t.latex_to_text(latex)
-        except Exception:
-            return latex
-
     def clean(self, text: str):
         result = text.strip()
         result = re.sub(r"[ \t]*([.,;:!?])[ \t]+", r"\1 ", result)
         return result
 
     def build_tree(self):
-        content, subsections = self.build_content(self.tex_doc)
+        content, subsections, images = self.build_content(self.tex_doc)
         main_section = Section(
             title=self.title,
             content=content,
             subsections=subsections,
+            figures=images,
         )
 
         return main_section
 
-    def build_content(self, tex_doc: TeX.TeXDocument) -> Tuple[str, List[Section]]:
+    def build_content(
+        self, tex_doc: TeX.TeXDocument
+    ) -> Tuple[str, List[Section], Dict[str, FigureData]]:
         """Get the text content of the current node"""
 
         content = ""
         subsections = []
+        images = {}
         for item in tex_doc:
             try:
                 name = item.nodeName
@@ -155,15 +67,19 @@ class LatexPaper(Paper):
                         if "subsub" not in name
                         else ""
                     )
-                    subcontent, subsubsections = self.build_content(item)
+                    subcontent, subsubsections, inner_images = self.build_content(item)
                     value = "\n\n" + title + underline + "\n" + subcontent
-                    subsections.append(Section(title, subcontent, subsubsections))
+                    subsections.append(
+                        Section(title, subcontent, subsubsections, inner_images)
+                    )
 
                 elif name == "thebibliography":
                     # TODO: bibliography should be another section, outside of the last section.
-                    bibcontent, _ = self.build_content(item)
+                    bibcontent, _, inner_images = self.build_content(item)
                     value = "\n\nReferences\n" + "=" * 10 + "\n" + bibcontent
-                    subsections.append(Section("References", bibcontent))
+                    subsections.append(
+                        Section("References", bibcontent, figures=inner_images)
+                    )
 
                 elif name == "table":
                     try:
@@ -186,8 +102,27 @@ class LatexPaper(Paper):
                 ):
                     value = self.encode(item.source)
 
+                elif name in ("figure", "figure*", "includeimage"):
+                    if getattr(item, "label", None) is not None:
+                        value = f"<figure. {item.label}"
+                        data = FigureData(
+                            label=item.label, path=item.path, size=item.size
+                        )
+                        caption = getattr(item, "caption", "")
+                        caption = self.encode(caption)
+                        if caption:
+                            data["caption"] = caption
+                            value += " - " + caption
+
+                        value += ">"
+                        if item.label:
+                            images[item.label] = data
+                    else:
+                        value = ""
+
                 elif item.hasChildNodes():
-                    value, innersubsections = self.build_content(item)
+                    value, innersubsections, child_images = self.build_content(item)
+                    images.update(child_images)
                     subsections.extend(innersubsections)
 
                 else:
@@ -210,7 +145,7 @@ class LatexPaper(Paper):
                 )
                 content += item.textContent
 
-        return content, subsections
+        return content, subsections, images
 
     def parse_table(self, latex_src: DOM.Node):
         """
@@ -219,8 +154,6 @@ class LatexPaper(Paper):
         :param table_node: LaTeX table node.
         :return: Pretty printed table as a string.
         """
-        # Remove LaTeX formatting that can't be represented in markdown
-        # latex_src = table_node.source
         table_content = re.search(
             r".*\\begin{tabular}{[^}]*}(.*?)\\end{tabular}.*",
             latex_src,
