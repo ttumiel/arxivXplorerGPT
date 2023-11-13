@@ -38,12 +38,12 @@
         "function": "chunk_search"
       },
       {
-        "source": "/get_image",
-        "function": "get_image"
+        "source": "/get_figure",
+        "function": "get_figure"
       },
       {
-        "source": "/list_images",
-        "function": "list_images"
+        "source": "/list_all_figures",
+        "function": "list_all_figures"
       }
     ],
     "ignore": [

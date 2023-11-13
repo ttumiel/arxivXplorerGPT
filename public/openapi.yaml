@@ -46,6 +46,91 @@ paths:
           description: A list of matching chunks in descending order of similarity.
       summary: Perform semantic search for a query across 250 word chunks of a paper's
         sections.
+  /get_figure:
+    post:
+      operationId: get_figure
+      x-openai-isConsequential: false
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                figure_id:
+                  type: string
+                paper_id:
+                  description: arxiv ID.
+                  type: string
+              required:
+              - paper_id
+              - figure_id
+              type: object
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                properties:
+                  label:
+                    type: string
+                  caption:
+                    anyOf:
+                    - type: string
+                    - type: 'null'
+                  section:
+                    anyOf:
+                    - type: string
+                    - type: 'null'
+                  url:
+                    items:
+                      type: string
+                    type: array
+                type: object
+          description: OK
+      summary: Get a figure URL, caption, and section title.
+  /list_all_figures:
+    post:
+      operationId: list_all_figures
+      x-openai-isConsequential: false
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                paper_id:
+                  description: arxiv ID.
+                  type: string
+              required:
+              - paper_id
+              type: object
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  properties:
+                    label:
+                      type: string
+                    caption:
+                      anyOf:
+                      - type: string
+                      - type: 'null'
+                    section:
+                      anyOf:
+                      - type: string
+                      - type: 'null'
+                    url:
+                      items:
+                        type: string
+                      type: array
+                  type: object
+          description: A list of all the figures in a paper.
+      summary: Get the figure URL, caption, and section title for all figures in a paper.
   /read_citation:
     post:
       operationId: read_citation
@@ -121,7 +206,8 @@ paths:
                 type: object
           description: OK
       summary: 'Read the metadata of a paper, where available. Including the paper''s
-        id, title, date, authors, abstract, table_of_contents, can_read_citation.'
+        id, title, date, authors, abstract, table_of_contents, can_read_citation, and
+        number of figures.'
   /read_section:
     post:
       operationId: read_section
@@ -153,7 +239,7 @@ paths:
             application/json:
               schema:
                 type: string
-          description: Section title and content
+          description: Section title, content and figures.
       summary: Read a specific section from the table of contents of a paper.
   /search:
     post:

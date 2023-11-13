@@ -1,7 +1,8 @@
 import json
 from abc import ABC, abstractmethod
 from dataclasses import asdict, dataclass
-from typing import Dict, List, Optional, Tuple, TypedDict, Union
+from typing import Dict, List, Optional, Tuple, Union
+from typing_extensions import TypedDict
 
 import regex as re
 

@@ -65,6 +65,8 @@ class ArxivXplorerAPI:
                 "read_section": self.read_section,
                 "read_citation": self.read_citation,
                 "chunk_search": self.chunk_search,
+                "get_figure": self.get_figure,
+                "list_all_figures": self.list_all_figures,
             }
         )
         server.export(path, export_source=export_source)
@@ -184,7 +186,7 @@ class ArxivXplorerAPI:
     @json_schema
     @error_logger
     def get_figure(self, paper_id: str, figure_id: str) -> FigureData:
-        """Get an image URL, caption, and section title.
+        """Get a figure URL, caption, and section title.
 
         Args:
             paper_id (str): arxiv ID.
@@ -195,13 +197,13 @@ class ArxivXplorerAPI:
     @json_schema
     @error_logger
     def list_all_figures(self, paper_id: str) -> List[FigureData]:
-        """Get the image URL, caption, and section title for all images in a paper.
+        """Get the figure URL, caption, and section title for all figures in a paper.
 
         Args:
             paper_id (str): arxiv ID.
 
         Returns:
-            A list of all the images in a paper.
+            A list of all the figures in a paper.
         """
         figures = self[paper_id].paper.figures.keys()
         figures = self.cache.get_paper_figures(paper_id, figure_ids=figures)
