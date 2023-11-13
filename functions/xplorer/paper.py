@@ -2,9 +2,9 @@ import json
 from abc import ABC, abstractmethod
 from dataclasses import asdict, dataclass
 from typing import Dict, List, Optional, Tuple, Union
-from typing_extensions import TypedDict
 
 import regex as re
+from typing_extensions import TypedDict
 
 from .vector_store import VectorStore
 
