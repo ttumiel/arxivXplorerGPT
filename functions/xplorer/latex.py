@@ -1,9 +1,10 @@
 import logging
 import os
+import traceback
 from typing import Optional
 
 from plasTeX import Base, Command, Config, Macro, TeX, TeXDocument
-from plasTeX.Packages import xcolor
+from plasTeX.Packages import listings, xcolor
 from pylatexenc.latex2text import (EnvironmentTextSpec, LatexNodes2Text,
                                    MacroTextSpec, get_default_latex_context_db)
 from pylatexenc.latexwalker import LatexMacroNode
@@ -134,8 +135,8 @@ class TeXParser(TeX.TeX):
                         item.parentNode = output
                         item.digest(tokens)
                     output.append(item)
-                except Exception as e:
-                    logger.warning(f"Error parsing item {item}: {e}")
+                except Exception:
+                    logger.error(f"Error parsing item {item}: {traceback.format_exc()}")
 
         except Exception as e:
             logger.error(f"Failed to parse Tex doc: {e}")
@@ -161,3 +162,19 @@ class textcolor(xcolor.ColorCommand):
 
 
 xcolor.textcolor = textcolor
+
+
+class lstinputlisting(Command):
+    args = "[ arguments:dict ] file:str"
+    counter = "listings"
+
+    def invoke(self, tex: TeXParser):
+        Command.invoke(self, tex)
+        if "file" not in self.attributes or not self.attributes["file"]:
+            raise ValueError("Malformed \\lstinputlisting macro.")
+        encoding = self.config["files"]["input-encoding"]
+        with open(tex.kpsewhich(self.attributes["file"]), encoding=encoding) as f:
+            listings._format(self, f.read(), wrap=True)
+
+
+listings.lstinputlisting = lstinputlisting

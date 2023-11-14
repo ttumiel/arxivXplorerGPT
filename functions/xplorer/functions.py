@@ -66,7 +66,6 @@ class ArxivXplorerAPI:
                 "read_citation": self.read_citation,
                 "chunk_search": self.chunk_search,
                 "get_figure": self.get_figure,
-                "list_all_figures": self.list_all_figures,
             }
         )
         server.export(path, export_source=export_source)

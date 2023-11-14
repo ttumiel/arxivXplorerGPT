@@ -99,7 +99,7 @@ class LatexPaper(Paper):
                     value = self.encode(item.source)
 
                 elif name in ("figure", "figure*", "includeimage"):
-                    if getattr(item, "label", None) is not None:
+                    if getattr(item, "path", None):
                         value = f"<figure. {item.label}"
                         data = FigureData(
                             label=item.label, path=item.path, size=item.size
@@ -114,7 +114,7 @@ class LatexPaper(Paper):
                         if item.label:
                             images[item.label] = data
                     else:
-                        value = ""
+                        value = self.encode(item.source)
 
                 elif item.hasChildNodes():
                     value, innersubsections, child_images = self.build_content(item)
