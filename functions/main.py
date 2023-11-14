@@ -74,11 +74,6 @@ def get_figure(paper_id: str, figure_id: str):
     return api.get_figure(paper_id, figure_id)
 
 
-@request_handler
-def list_all_figures(paper_id: str):
-    return api.list_all_figures(paper_id)
-
-
 @scheduler_fn.on_schedule(
     schedule="0 5 * * 0",
     timezone=scheduler_fn.Timezone("Etc/UTC"),

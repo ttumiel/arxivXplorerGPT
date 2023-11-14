@@ -40,10 +40,6 @@
       {
         "source": "/get_figure",
         "function": "get_figure"
-      },
-      {
-        "source": "/list_all_figures",
-        "function": "list_all_figures"
       }
     ],
     "ignore": [

@@ -90,48 +90,6 @@ paths:
                 type: object
           description: OK
       summary: Get a figure URL, caption, and section title.
-  /list_all_figures:
-    post:
-      operationId: list_all_figures
-      x-openai-isConsequential: false
-      parameters: []
-      requestBody:
-        content:
-          application/json:
-            schema:
-              properties:
-                paper_id:
-                  description: arxiv ID.
-                  type: string
-              required:
-              - paper_id
-              type: object
-        required: true
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  properties:
-                    label:
-                      type: string
-                    caption:
-                      anyOf:
-                      - type: string
-                      - type: 'null'
-                    section:
-                      anyOf:
-                      - type: string
-                      - type: 'null'
-                    url:
-                      items:
-                        type: string
-                      type: array
-                  type: object
-          description: A list of all the figures in a paper.
-      summary: Get the figure URL, caption, and section title for all figures in a paper.
   /read_citation:
     post:
       operationId: read_citation
