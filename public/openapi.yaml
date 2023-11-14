@@ -58,6 +58,7 @@ paths:
               properties:
                 figure_id:
                   type: string
+                  description: The image ref to lookup. e.g. `demo` from the figure `<figure. demo - This is the caption>`
                 paper_id:
                   description: arxiv ID.
                   type: string

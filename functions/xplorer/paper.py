@@ -1,4 +1,6 @@
+import base64
 import json
+import zlib
 from abc import ABC, abstractmethod
 from dataclasses import asdict, dataclass
 from typing import Dict, List, Optional, Tuple, Union
@@ -251,14 +253,22 @@ class Paper(ABC):
     def __repr__(self):
         return self.title + "\n" + self.table_of_contents
 
+    def _compress(self, data: str) -> str:
+        data = zlib.compress(data.encode("utf-8"))
+        return base64.b64encode(data).decode("ascii")
+
+    def _decompress(self, data: str) -> str:
+        data = base64.b64decode(data)
+        return zlib.decompress(data).decode("utf-8")
+
     def dumps(self, vectors: bool = True) -> dict:
         data = {
-            "tree": json.dumps(asdict(self.tree)),
-            "bibliography": json.dumps(self.bibliography),
+            "tree": self._compress(json.dumps(asdict(self.tree))),
+            "bibliography": self._compress(json.dumps(self.bibliography)),
             "title": self.title,
         }
         if vectors:
-            data["store"] = (self.store.dump() if self.store else None,)
+            data["store"] = self.store.dump() if self.store else None
 
         if self.figures:
             data["figures"] = json.dumps(self.figures)
@@ -277,9 +287,10 @@ class Paper(ABC):
                     self.figures = json.loads(data["figures"])
 
             def build(self, filename=None):
-                return Section.from_dict(json.loads(data["tree"]))
+                tree = json.loads(self._decompress(data["tree"]))
+                return Section.from_dict(tree)
 
             def build_bibliography(self) -> Dict[str, str]:
-                return json.loads(data["bibliography"])
+                return json.loads(self._decompress(data["bibliography"]))
 
         return JSONPaper()

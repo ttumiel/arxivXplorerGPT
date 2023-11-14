@@ -6,7 +6,7 @@ import zipfile
 from typing import Dict, List, Optional
 
 import cairosvg
-from pdf2image import convert_from_bytes
+import fitz
 from PIL import Image
 from plasTeX import Base, Command, Environment
 from plasTeX.Base import Caption
@@ -74,9 +74,13 @@ def process_image(
             im = Image.open(io.BytesIO(png_image))
 
         elif format == "pdf":
-            images = convert_from_bytes(image_data, fmt="png", dpi=96, last_page=1)
-            im = images[0]
-
+            doc = fitz.open(stream=image_data, filetype=format)
+            if len(doc) > 1:
+                logger.warning(
+                    "PDF contains multiple pages, only the first will be used."
+                )
+            pix = doc[0].get_pixmap(matrix=fitz.Matrix(1.6, 1.6))
+            im = Image.open(io.BytesIO(pix.pil_tobytes(format="png")))
         else:
             im = Image.open(io.BytesIO(image_data))
 

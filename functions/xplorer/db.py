@@ -256,7 +256,9 @@ class PaperCache:
         assert paper is not None, "Couldn't fetch paper."
         return paper
 
-    def upload_paper_images(self, paper_id: str, paper: Paper, filename: Optional[str] = None):
+    def upload_paper_images(
+        self, paper_id: str, paper: Paper, filename: Optional[str] = None
+    ):
         image_paths = []
         for figure in paper.figures.values():
             image_paths.extend(figure["path"])
@@ -269,7 +271,6 @@ class PaperCache:
                 self.storage.upload_paper_images(paper_id, temp_file.name)
             elif filename is not None:
                 self.storage.upload_paper_images(paper_id, filename)
-
 
     def lru_delete_remote(self) -> int:
         deleted_ids = self.firestore_db.lru_delete()
@@ -307,7 +308,7 @@ class LocalPaperCache(DBCache):
         self.chunk_db: Dict[str, VectorStore] = {}
 
     def __setitem__(self, paper_id: str, paper: PaperData):
-        self.db[paper_id] = {"paper": paper.dump(), "timestamp": datetime.now()}
+        self.db[paper_id] = {"paper": paper, "timestamp": datetime.now()}
         if paper.paper.store is not None:
             self.chunk_db[paper_id] = paper.paper.store
         self.lru_delete()
@@ -316,8 +317,7 @@ class LocalPaperCache(DBCache):
         if paper_id in self.db:
             record = self.db[paper_id]
             record["timestamp"] = datetime.now()
-            # TODO: Do I need to dump and reload the paper if its in mem?
-            return PaperData.load(record["paper"])
+            return record["paper"]
         else:
             return None
 
@@ -342,6 +342,7 @@ class FirestorePaperCache(DBCache):
         self.collection_name = collection_name
 
     def __setitem__(self, paper_id: str, paper: PaperData):
+        # TODO: Guard against extra large papers >1MB?
         paper_id = self._sanitize_path(paper_id)
         with self.db.transaction():
             doc_ref = self.db.collection(self.collection_name).document(paper_id)
@@ -426,8 +427,12 @@ class Storage:
 
     def upload_from_string(self, name: str, image: bytes):
         blob = self.bucket.blob(name)
-        blob.upload_from_string(image)
-        return blob._get_download_url(self.bucket.client).split("?")[0]
+        blob.upload_from_string(image, content_type="image/png")
+        try:
+            blob.make_public()
+        except Exception as e:
+            logger.error(f"Couldn't make blob public: {e}")
+        return blob.public_url
 
     def upload_from_file(self, name: str, file_path: str):
         blob = self.bucket.blob(name)
@@ -449,7 +454,9 @@ class Storage:
 
     def delete_data_path(self, paper_id: str):
         warning = lambda e: logger.warning(f"Couldn't delete blob. {e}")
-        self.bucket.delete_blobs([self._get_data_path(paper_id)], on_error=warning)
+        blob = self._get_data_path(paper_id)
+        if blob:
+            self.bucket.delete_blobs([blob], on_error=warning)
 
     def _sanitize_path(self, path: str) -> str:
         return path.replace("/", "_").replace(".", "_")
@@ -459,9 +466,13 @@ class Storage:
         return f"papers/{self._sanitize_path(paper_id)}_images{ext}"
 
     def _get_data_path(self, paper_id: str):
-        return self.bucket.list_blobs(
-            prefix=f"papers/{self._sanitize_path(paper_id)}_images."
-        )[0]
+        blobs = list(
+            self.bucket.list_blobs(
+                prefix=f"papers/{self._sanitize_path(paper_id)}_images."
+            )
+        )
+        if len(blobs) != 0:
+            return blobs[0].name
 
     def fetch_figure_urls(self, paper_id: str, figures: List[FigureData]):
         path = self._get_data_path(paper_id)
@@ -481,7 +492,7 @@ class Storage:
             self.download_file(self._get_data_path(paper_id), temp_file.name)
             doc = fitz.open(temp_file.name)
             for figure in figures:
-                image_data = doc.extract_image(figure["path"])
+                image_data = doc.extract_image(figure["path"][0])
                 image_bytes = process_image(
                     image_data["image"], format=image_data["ext"]
                 )

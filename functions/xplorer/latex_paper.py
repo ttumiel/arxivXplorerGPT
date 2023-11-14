@@ -74,12 +74,8 @@ class LatexPaper(Paper):
                     )
 
                 elif name == "thebibliography":
-                    # TODO: bibliography should be another section, outside of the last section.
-                    bibcontent, _, inner_images = self.build_content(item)
-                    value = "\n\nReferences\n" + "=" * 10 + "\n" + bibcontent
-                    subsections.append(
-                        Section("References", bibcontent, figures=inner_images)
-                    )
+                    # Skip the bibcontent since we already have the bibliography
+                    value = ""
 
                 elif name == "table":
                     try:

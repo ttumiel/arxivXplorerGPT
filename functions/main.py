@@ -70,12 +70,12 @@ def search(
 
 
 @request_handler
-def get_figure(paper_id: str, image_id: str):
-    return api.get_figure(paper_id, image_id)
+def get_figure(paper_id: str, figure_id: str):
+    return api.get_figure(paper_id, figure_id)
 
 
 @request_handler
-def list_figures(paper_id: str):
+def list_all_figures(paper_id: str):
     return api.list_all_figures(paper_id)
 
 

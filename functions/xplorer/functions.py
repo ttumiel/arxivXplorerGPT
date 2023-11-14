@@ -190,7 +190,7 @@ class ArxivXplorerAPI:
 
         Args:
             paper_id (str): arxiv ID.
-            citation (str): The image ref to lookup. e.g. `demo` from the figure `<figure. demo - This is the caption>`
+            figure_id (str): The image ref to lookup. e.g. `demo` from the figure `<figure. demo - This is the caption>`
         """
         return self.cache.get_paper_figures(paper_id, figure_ids=[figure_id])[0]
 
