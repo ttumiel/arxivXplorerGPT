@@ -183,7 +183,7 @@ class PaperCache:
     def extract_source(self, file_path, output_dir):
         "Arxiv source is either a tar.gz folder or a gzipped tex file."
         if tarfile.is_tarfile(file_path):
-            with tarfile.open(file_path, "r:gz") as tar:
+            with tarfile.open(file_path, "r:*") as tar:
                 tar.extractall(path=output_dir)
         else:
             with gzip.open(file_path, "rb") as f_in:
@@ -199,7 +199,7 @@ class PaperCache:
                 directory, filename = os.path.split(temp_file.name)
                 paper.download_pdf(directory, filename)
                 paper = PDFPaper(temp_file.name, title=title)
-                self.upload_paper_images(arxiv_id, paper)
+                self.upload_paper_images(arxiv_id, paper, filename=temp_file.name)
                 return paper
         except Exception as e:
             logger.error(f"Error fetching pdf paper: {e}")
@@ -256,15 +256,20 @@ class PaperCache:
         assert paper is not None, "Couldn't fetch paper."
         return paper
 
-    def upload_paper_images(self, paper_id: str, paper: Paper):
+    def upload_paper_images(self, paper_id: str, paper: Paper, filename: Optional[str] = None):
         image_paths = []
         for figure in paper.figures.values():
             image_paths.extend(figure["path"])
-            figure["path"] = [os.path.basename(path) for path in figure["path"]]
+            if isinstance(paper, LatexPaper):
+                figure["path"] = [os.path.basename(path) for path in figure["path"]]
 
         with tempfile.NamedTemporaryFile(suffix=".zip") as temp_file:
-            pack_images(image_paths, temp_file.name, compression=1)
-            self.storage.upload_paper_images(paper_id, temp_file.name)
+            if isinstance(paper, LatexPaper):
+                pack_images(image_paths, temp_file.name, compression=1)
+                self.storage.upload_paper_images(paper_id, temp_file.name)
+            elif filename is not None:
+                self.storage.upload_paper_images(paper_id, filename)
+
 
     def lru_delete_remote(self) -> int:
         deleted_ids = self.firestore_db.lru_delete()

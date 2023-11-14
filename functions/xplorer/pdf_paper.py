@@ -30,7 +30,7 @@ class PDFPaper(Paper):
                     xref = img[0]
                     label = f"fig_{xref}_page{page_num}_{i}"
                     if label not in page_images:
-                        page_images[label] = FigureData(label=label, path=xref)
+                        page_images[label] = FigureData(label=label, path=[xref])
 
             except Exception as e:
                 logger.error("Error extracting images: " + str(e))
