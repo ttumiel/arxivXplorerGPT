@@ -162,7 +162,7 @@ class ArxivXplorerAPI:
             section_id = [i - 1 for i in section_id]
 
         section = self[paper_id].paper[section_id]
-        figures = self.cache.get_paper_figures(paper_id, section.figures.keys())
+        figures = self.cache.get_paper_figures(paper_id, section.all_figure_ids)
 
         return {"content": str(section), "figures": figures}
 

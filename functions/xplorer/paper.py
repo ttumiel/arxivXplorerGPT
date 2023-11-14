@@ -88,6 +88,14 @@ class Section:
     def chunks(self):
         return chunk(self.content)
 
+    @property
+    def all_figure_ids(self) -> List[str]:
+        keys = set(self.figures.keys())
+        if self.subsections:
+            for s in self.subsections:
+                keys.update(s.all_figure_ids)
+        return list(keys)
+
     def __repr__(self) -> str:
         return self.title + "\n" + self.content
 
