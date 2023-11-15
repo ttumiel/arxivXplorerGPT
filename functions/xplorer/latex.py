@@ -4,7 +4,7 @@ import traceback
 from typing import Optional
 
 from plasTeX import Base, Command, Config, Macro, TeX, TeXDocument
-from plasTeX.Packages import listings, xcolor
+from plasTeX.Packages import listings, url, xcolor
 from pylatexenc.latex2text import (EnvironmentTextSpec, LatexNodes2Text,
                                    MacroTextSpec, get_default_latex_context_db)
 from pylatexenc.latexwalker import LatexMacroNode
@@ -161,9 +161,6 @@ class textcolor(xcolor.ColorCommand):
         Command.digest(self, tokens)
 
 
-xcolor.textcolor = textcolor
-
-
 class lstinputlisting(Command):
     args = "[ arguments:dict ] file:str"
     counter = "listings"
@@ -177,4 +174,27 @@ class lstinputlisting(Command):
             listings._format(self, f.read(), wrap=True)
 
 
+class urldef(Command):
+    args = "name:cs type:cs"
+
+    class DefinedURL(Command):
+        result = None
+
+        def invoke(self, tex):
+            return self.result
+
+    def invoke(self, tex):
+        Command.invoke(self, tex)
+        name = self.attributes["name"]
+        command_type = self.attributes["type"]
+        c = self.ownerDocument.context
+        obj = c[command_type]()
+        obj.parentNode = self.parentNode
+        obj.ownerDocument = self.ownerDocument
+        result = obj.invoke(tex)
+        c.addGlobal(name, type(name, (self.DefinedURL,), {"result": result}))
+
+
+xcolor.textcolor = textcolor
 listings.lstinputlisting = lstinputlisting
+url.urldef = urldef
