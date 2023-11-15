@@ -233,6 +233,8 @@ class PaperCache:
             # Extract the text
             main_file = guess_main_tex_file(datadir)
             paper = LatexPaper(main_file, title=title)
+            assert paper.tree.subsections, "Failed to parse paper."
+
             self.upload_paper_images(paper_id, paper)
 
             # Remove the extracted files
