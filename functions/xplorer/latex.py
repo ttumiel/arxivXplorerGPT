@@ -100,7 +100,7 @@ class TeXParser(TeX.TeX):
 
             # Check with suffix
             candidate_path = os.path.join(path, name)
-            if os.path.exists(candidate_path):
+            if os.path.exists(candidate_path) and not os.path.isdir(candidate_path):
                 return os.path.abspath(candidate_path)
 
             # Check without suffix by matching any file that starts with the name
@@ -109,7 +109,9 @@ class TeXParser(TeX.TeX):
             if os.path.exists(folder) and os.path.isdir(folder):
                 for candidate in os.listdir(folder):
                     if candidate.startswith(filename + "."):
-                        return os.path.abspath(os.path.join(folder, candidate))
+                        path = os.path.join(folder, candidate)
+                        if not os.path.isdir(path):
+                            return os.path.abspath(path)
 
         raise FileNotFoundError(f"Could not find any file named: {name}")
 
