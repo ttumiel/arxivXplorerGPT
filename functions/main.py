@@ -1,4 +1,5 @@
 import functools
+import json
 import traceback
 from typing import List, Union
 
@@ -29,7 +30,10 @@ def request_handler(fn=None, allow_cors=True, secrets=None):
     def thunk(request: https_fn.Request):
         try:
             args = request.json if request.is_json else {}
-            result = function_call(fn, args, validate=True, from_json=False)
+            result = function_call(
+                fn, args, validate=True, from_json=False, return_json=False
+            )
+            result = json.dumps(result, ensure_ascii=False, indent=2)
             return https_fn.Response(result, mimetype="application/json")
         except Exception as e:
             print(f"ERROR :: Function {fn.__name__} failed:\n", traceback.format_exc())
