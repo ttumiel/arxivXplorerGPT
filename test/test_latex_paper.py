@@ -19,6 +19,7 @@ with open("test/data/test_toc.json") as f:
         "muzero",
         "resnet",
         "transformer",
+        "llama",
     ],
 )
 def test_latex_paper_toc(paper):
