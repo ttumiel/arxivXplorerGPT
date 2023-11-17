@@ -30,7 +30,7 @@ class LatexPaper(Paper):
     def get_title(self, tex_doc):
         title = tex_doc.userdata.get("title", None)
         if title is not None:
-            return title.textContent
+            return str(title.textContent)
 
     def clean(self, text: str):
         result = text.strip()

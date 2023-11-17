@@ -3,8 +3,11 @@ import os
 import traceback
 from typing import Optional
 
-from plasTeX import Base, Command, Config, Macro, TeX, TeXDocument
+import plasTeX
+from plasTeX import (DOM, Base, Command, Config, Context, Macro, TeX,
+                     TeXDocument)
 from plasTeX.Packages import listings, url, xcolor
+from plasTeX.Tokenizer import Other, Tokenizer
 from pylatexenc.latex2text import (EnvironmentTextSpec, LatexNodes2Text,
                                    MacroTextSpec, get_default_latex_context_db)
 from pylatexenc.latexwalker import LatexMacroNode
@@ -197,6 +200,70 @@ class urldef(Command):
         c.addGlobal(name, type(name, (self.DefinedURL,), {"result": result}))
 
 
+def newcommand(
+    self: Context.Context,
+    name: str,
+    nargs: int = 0,
+    definition: Optional[str] = None,
+    opt=None,
+):
+    """
+    Create a \\newcommand
+
+    Required Arguments:
+    name -- name of the macro to create
+    nargs -- integer number of arguments that the macro has
+    definition -- string containing the LaTeX definition
+    opt -- string containing the LaTeX code to use in the
+        optional argument
+
+    Examples::
+        c.newcommand('bold', 1, r'\\textbf{#1}')
+        c.newcommand('foo', 2, r'{\\bf #1#2}', opt='myprefix')
+
+    """
+    # Macro already exists
+    if name in self:
+        if not issubclass(
+            self[name],
+            (
+                plasTeX.NewCommand,
+                plasTeX.UnrecognizedMacro,
+                plasTeX.Definition,
+                Context.relax,
+            ),
+        ):
+            if not issubclass(self[name], plasTeX.TheCounter):
+                return
+        logger.debug('redefining command "%s"', name)
+
+    if nargs is None:
+        nargs = 0
+    assert isinstance(nargs, int), "nargs must be an integer"
+
+    if isinstance(definition, str):
+        definition = list(Tokenizer(definition, self))
+
+    for i, arg in enumerate(definition):
+        if arg == name:
+            logger.warning("Recursive definition of %s", name)
+            definition[i] = Other(str(name))
+
+    if isinstance(opt, str):
+        opt = list(Tokenizer(opt, self))
+
+    logger.debug("creating newcommand %s", name)
+    newclass = type(
+        name,
+        (plasTeX.NewCommand,),
+        {"nargs": nargs, "opt": opt, "definition": definition},
+    )
+
+    self.addGlobal(name, newclass)
+
+
 xcolor.textcolor = textcolor
 listings.lstinputlisting = lstinputlisting
 url.urldef = urldef
+Context.Context.newcommand = newcommand
+del DOM.CharacterData.__str__
