@@ -43,6 +43,7 @@ class PaperMetadata(TypedDict, total=False):
     abstract: str
     table_of_contents: str
     can_read_citation: bool
+    num_figures: int
 
 
 @dataclass

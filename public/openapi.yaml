@@ -17,7 +17,7 @@ paths:
             schema:
               properties:
                 count:
-                  default: 3
+                  default: 4
                   description: The number of results to return.
                   type: integer
                 page:
@@ -162,6 +162,8 @@ paths:
                     type: string
                   title:
                     type: string
+                  num_figures:
+                    type: integer
                 type: object
           description: OK
       summary: 'Read the metadata of a paper, where available. Including the paper''s

@@ -63,7 +63,7 @@ class VectorStore:
             dtype=np.float32,
         )
 
-    def search(self, query: str, count: int = 3) -> List[str]:
+    def search(self, query: str, count: int = 4) -> List[str]:
         if self.vectors is None or self.chunks is None:
             raise ValueError("Vectors and chunks must be initialized before search.")
 
