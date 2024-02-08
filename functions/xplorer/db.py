@@ -91,8 +91,8 @@ class PaperCache:
     def __init__(self, firestore_collection: Optional[str] = None):
         self.local_db = LocalPaperCache(limit=15)
         if firestore_collection:
-            self.firestore_db = FirestorePaperCache(firestore_collection, limit=5000)
-            self.realtime_db = RealtimeDBPaperCache(limit=5000)
+            self.firestore_db = FirestorePaperCache(firestore_collection, limit=100)
+            self.realtime_db = RealtimeDBPaperCache(limit=100)
             self.storage = Storage()
         else:
             self.firestore_db = self.realtime_db = self.storage = None
