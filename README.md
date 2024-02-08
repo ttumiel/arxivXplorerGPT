@@ -1,5 +1,8 @@
 # arXiv Xplorer Plugin
 
+[Try it on ChatGPT](https://chat.openai.com/g/g-WeT9tE7SR-arxiv-xplorer)
+[Read the Docs](https://arxivxplorer.com/plugin/)
+
 ## Functions
 
 - `search`: Find relevant papers based on a search query.
@@ -31,4 +34,3 @@
 5. Find related papers:
    1. Search by Similarity method (`search`) if given the `paper_id`
    2. Look inside the related work section for citations, and read those papers (`read_section`, `get_citation`, `search`).
-
