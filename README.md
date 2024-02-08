@@ -1,4 +1,4 @@
-# arXiv Xplorer Plugin
+# arXiv Xplorer GPT
 
 [Try it on ChatGPT](https://chat.openai.com/g/g-WeT9tE7SR-arxiv-xplorer)
 [Read the Docs](https://arxivxplorer.com/plugin/)
